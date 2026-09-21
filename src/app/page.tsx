@@ -1,27 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import type { ReportDto } from "@/lib/dto";
+import { useRef, useState } from "react";
+import type { Progress } from "@/lib/core/progress";
+import type { ReportDto, ReportStreamLine } from "@/lib/dto";
 import { parseEur } from "@/lib/format";
 import { combineKap } from "@/lib/tax/kap";
 import { FundingCard, KapCard, SoCard } from "./_components/FormCards";
 import { button, card, input } from "./_components/format";
 import { loadOthers, OtherPlatforms, saveOthers, type OtherRow } from "./_components/OtherPlatforms";
+import { ProgressPanel } from "./_components/ProgressBar";
 import { HedgedMarkets, PositionsTable } from "./_components/Positions";
 import { SpotDisposals } from "./_components/Spot";
-import { TradeTypePicker } from "./_components/TradeTypePicker";
-import { expectsOtherPlatforms, hasArbitrage, needsPerps, needsSpot, spotReasons, type TradeSelection } from "./trade-types";
+import { findHedgedMarkets } from "./_components/Positions";
 import { berlinYear } from "@/lib/core/time";
 
-// Found on mainnet: a Phoenix perp trader and a Jupiter swap (memecoin) trader.
-const SAMPLE_WALLET = "wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw";
-const SAMPLE_SPOT_WALLET = "3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D";
+// Found on mainnet: a Phoenix perp trader, and a memecoin trader (pump.fun via a trading bot, some Jupiter swaps).
+const SAMPLES = [
+  ["Sample: perp trader", "wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw"],
+  ["Sample: memecoin trader", "3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D"],
+] as const;
 const THIS_YEAR = berlinYear(new Date());
 const YEARS = [THIS_YEAR, THIS_YEAR - 1, THIS_YEAR - 2];
-const PROTOCOLS = [
-  ["phoenix", "Phoenix"],
-  ["jupiter", "Jupiter Perps"],
-] as const;
 
 function download(name: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
@@ -30,6 +29,32 @@ function download(name: string, content: string) {
   a.download = name;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Reads the NDJSON stream from /api/report: progress lines, an optional partial report (perps done,
+ * spot still loading), then one result or error line.
+ */
+async function readReportStream(body: ReadableStream<Uint8Array>, onProgress: (p: Progress) => void, onPartial: (r: ReportDto) => void): Promise<ReportDto> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const raw of lines) {
+      if (!raw.trim()) continue;
+      const line = JSON.parse(raw) as ReportStreamLine;
+      if (line.type === "progress") onProgress(line.progress);
+      else if (line.type === "partial") onPartial(line.report);
+      else if (line.type === "error") throw new Error(line.error);
+      else return line.report;
+    }
+  }
+  throw new Error("The report stream ended without a result");
 }
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
@@ -45,20 +70,18 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 }
 
 export default function Home() {
-  const [selection, setSelection] = useState<TradeSelection>({ types: ["perps"], arbKinds: [] });
   const [wallet, setWallet] = useState("");
   const [year, setYear] = useState(THIS_YEAR);
-  const [protocols, setProtocols] = useState<string[]>(["phoenix"]);
   const [fundingMode, setFundingMode] = useState<"separate" | "include">("separate");
   const [loading, setLoading] = useState(false);
+  /** The report on screen belongs to an earlier query; dim it until the new one arrives. */
+  const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportDto | null>(null);
   const [others, setOthers] = useState<OtherRow[]>([]);
-
-  const perps = needsPerps(selection);
-  const spot = needsSpot(selection);
-  const arbitrage = hasArbitrage(selection);
-  const crossExchange = expectsOtherPlatforms(selection);
+  const [steps, setSteps] = useState<Progress[]>([]);
+  const [elapsed, setElapsed] = useState(0);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function updateOthers(rows: OtherRow[]) {
     setOthers(rows);
@@ -69,34 +92,44 @@ export default function Home() {
   const totals = report ? combineKap(report.kap, otherSources) : null;
   const othersIncluded = otherSources.some((o) => o.gainsEur || o.lossesEur);
 
-  const toggleProtocol = (p: string) => setProtocols((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setStale(true);
     setError(null);
-    setReport(null);
+    setSteps([]);
+    // The previous report stays on screen (dimmed) so the page doesn't collapse and jump while loading.
+    const started = Date.now();
+    setElapsed(0);
+    timer.current = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    const show = (r: ReportDto) => {
+      setReport(r);
+      setStale(false);
+      // Other-platform amounts belong to a wallet and tax year; restore what was entered last time.
+      setOthers(loadOthers(r.wallet, r.taxYear));
+    };
     try {
+      // Everything is read: all perp venues and spot. Nothing to choose, so nothing can be forgotten.
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ wallet, year, protocols: perps ? protocols : [], fundingMode, spot }),
+        body: JSON.stringify({ wallet, year, fundingMode }),
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      setReport(body);
-      // Other-platform amounts belong to a wallet and tax year; restore what was entered last time,
-      // or offer an empty row when the user told us a leg lives elsewhere.
-      const saved = loadOthers(body.wallet, body.taxYear);
-      setOthers(saved.length || !crossExchange ? saved : [{ label: "", gains: "", losses: "" }]);
+      if (!res.ok || !res.body) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      const result = await readReportStream(res.body, (p) => setSteps((cur) => [...cur.filter((x) => x.source !== p.source), p]), show);
+      setReport(result);
+      setStale(false);
     } catch (err) {
       setError((err as Error).message);
     } finally {
+      if (timer.current) clearInterval(timer.current);
       setLoading(false);
     }
   }
 
-  const canSubmit = (perps || spot) && wallet.trim() && (!perps || protocols.length) && (!arbitrage || selection.arbKinds.length);
   const prefix = report ? `perpelster-${report.wallet.slice(0, 8)}-${report.taxYear}` : "";
 
   async function downloadReceipt() {
@@ -105,172 +138,179 @@ export default function Home() {
     const { buildReceipt } = await import("@/lib/export/pdf");
     buildReceipt({ report, totals, others: otherSources, so: report.so }).save(`${prefix}-nachweis.pdf`);
   }
-  const soReasons = spotReasons(selection);
+
+  // What the wallet actually did decides what the page shows.
+  const fillsBy = (protocol: string) => report?.fills.filter((f) => f.protocol === protocol).length ?? 0;
+  const hasPerps = !!report && (report.positions.length > 0 || report.fundingPayments > 0);
+  const hedged = report ? findHedgedMarkets(report) : [];
+  const venues = report?.so ? [...new Set(report.so.disposals.map((d) => d.venue.replace(" (via bot)", "")))] : [];
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6">
+    <main className={`mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 ${loading ? "pb-48" : ""}`}>
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Perpelster</h1>
-        <p className="mt-1 text-sm text-muted">
-          Tell us how you trade on Solana; we tell you which lines to fill in ELSTER, with an on-chain receipt for every fill.
-        </p>
+        <p className="text-sm font-medium text-muted">Perpelster</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Your perp trades, ready for ELSTER.</h1>
+        <p className="mt-1 text-sm text-muted">Jupiter and Phoenix trades turned into German tax reports — no spreadsheets, no manual tagging.</p>
       </header>
 
       <form onSubmit={submit} className={`${card} grid gap-8`}>
-        <Step n={1} title="What did you trade?">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted">Tax year</span>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className={`${input} py-1.5`}>
+        <Step n={1} title="Which wallet?">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={wallet}
+              onChange={(e) => setWallet(e.target.value)}
+              placeholder="Solana wallet address"
+              aria-label="Wallet address"
+              spellCheck={false}
+              className={`${input} min-w-0 flex-1 font-mono`}
+            />
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Tax year" className={input}>
               {YEARS.map((y) => (
-                <option key={y}>{y}</option>
+                <option key={y} value={y}>
+                  Tax year {y}
+                </option>
               ))}
             </select>
           </div>
-          <TradeTypePicker value={selection} onChange={setSelection} />
-          {arbitrage && !selection.arbKinds.length && <p className="text-sm text-warn">Pick at least one kind of arbitrage.</p>}
+          <div className="flex flex-wrap gap-2">
+            {SAMPLES.map(([label, address]) => (
+              <button key={address} type="button" onClick={() => setWallet(address)} className={`${button} py-1 text-xs`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted">
+            We read everything the wallet did: perps on Phoenix and Jupiter Perps, and spot swaps on Jupiter, pump.fun or through a trading bot. Perps show up
+            in seconds; spot needs the wallet&apos;s whole history and can take a few minutes on the first query.
+          </p>
         </Step>
 
-        {(perps || spot) && (
-          <Step n={2} title={perps ? "Which wallet and platforms?" : "Which wallet?"}>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                value={wallet}
-                onChange={(e) => setWallet(e.target.value)}
-                placeholder="Solana wallet address"
-                aria-label="Wallet address"
-                spellCheck={false}
-                className={`${input} min-w-0 flex-1 font-mono`}
-              />
-              <button type="button" onClick={() => setWallet(perps ? SAMPLE_WALLET : SAMPLE_SPOT_WALLET)} className={button}>
-                Use sample wallet
-              </button>
-            </div>
-            {perps && (
-              <div className="flex flex-wrap gap-4 text-sm">
-                {PROTOCOLS.map(([id, label]) => (
-                  <label key={id} className="flex items-center gap-2">
-                    <input type="checkbox" checked={protocols.includes(id)} onChange={() => toggleProtocol(id)} />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            )}
-            {spot && (
-              <p className="text-xs text-muted">
-                Spot reads the wallet&apos;s whole history, since FIFO needs purchases from earlier years. This can take several minutes without a dedicated
-                RPC.
-              </p>
-            )}
-            {crossExchange && (
-              <p className="text-xs text-muted">
-                Both legs on Phoenix and Jupiter? Tick both. A leg on another platform can be entered after the report is ready.
-              </p>
-            )}
-            {perps && protocols.includes("jupiter") && (
-              <p className="text-xs text-muted">Jupiter history is decoded from on-chain events and can take several minutes without a dedicated RPC.</p>
-            )}
-          </Step>
-        )}
-
-        {perps && (
-          <Step n={3} title="How should funding fees count?">
-            <div className="grid gap-2 text-sm">
-              <label className="flex items-start gap-2">
-                <input className="mt-1" type="radio" checked={fundingMode === "separate"} onChange={() => setFundingMode("separate")} />
-                <span>
-                  List separately
-                  <span className="block text-xs text-muted">Kept out of the KAP lines for you or your tax advisor to decide.</span>
+        <Step n={2} title="How should funding fees count?">
+          <p className="text-xs text-muted">
+            Realized PnL and trading fees always go into Anlage KAP. For funding fees there is no official guidance on German tax treatment yet, so the choice
+            is yours.
+          </p>
+          <div className="grid gap-2 text-sm">
+            <label className="flex items-start gap-2">
+              <input className="mt-1" type="radio" checked={fundingMode === "separate"} onChange={() => setFundingMode("separate")} />
+              <span>
+                List separately <span className="text-muted">(recommended)</span>
+                <span className="block text-xs text-muted">Kept out of the KAP lines for you or your tax advisor to decide.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input className="mt-1" type="radio" checked={fundingMode === "include"} onChange={() => setFundingMode("include")} />
+              <span>
+                Include in result
+                <span className="block text-xs text-muted">
+                  Received funding counts as gain, paid funding and borrow fees as loss. For funding-rate arbitrage, funding is the main income.
                 </span>
-              </label>
-              <label className="flex items-start gap-2">
-                <input className="mt-1" type="radio" checked={fundingMode === "include"} onChange={() => setFundingMode("include")} />
-                <span>
-                  Include in result
-                  <span className="block text-xs text-muted">Received funding counts as gain, paid funding and borrow fees as loss.</span>
-                </span>
-              </label>
-            </div>
-            {arbitrage && (
-              <p className="text-xs text-warn">
-                For funding-rate trades, funding is the main income. There is no official guidance on how to treat it; &ldquo;List separately&rdquo; leaves it
-                out of the KAP numbers.
-              </p>
-            )}
-          </Step>
-        )}
-
-        {(perps || spot) && (
-          <div>
-            <button disabled={loading || !canSubmit} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-50">
-              {loading ? "Reading trade history…" : "Generate report"}
-            </button>
+              </span>
+            </label>
           </div>
-        )}
+        </Step>
+
+        <div>
+          <button disabled={loading || !wallet.trim()} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-50">
+            {loading ? "Generating…" : "Generate report"}
+          </button>
+        </div>
       </form>
 
       {error && <p className="mt-6 rounded-lg border border-bad/40 bg-bad/10 px-4 py-3 text-sm text-bad">{error}</p>}
 
       {report && totals && (
-        <div className="mt-10 grid gap-10">
+        <div className={`mt-10 grid gap-10 transition-opacity ${stale ? "pointer-events-none opacity-40" : ""}`} aria-busy={loading}>
           <section className="grid gap-4">
-            <h2 className="text-lg font-semibold">What to enter</h2>
+            <div>
+              <h2 className="text-lg font-semibold">What to enter</h2>
+              <p className="mt-1 text-xs text-muted">
+                Found in {report.taxYear}: Phoenix {fillsBy("phoenix")} trades · Jupiter Perps {fillsBy("jupiter")} trades · spot{" "}
+                {report.soPending
+                  ? "still reading…"
+                  : report.so
+                    ? `${report.so.disposals.length} disposals${venues.length ? ` (${venues.join(", ")})` : ""}`
+                    : "—"}
+              </p>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <KapCard report={report} totals={totals} othersIncluded={othersIncluded} />
-              <SoCard taxYear={report.taxYear} reasons={soReasons} so={report.so} error={report.soError} />
+              <SoCard taxYear={report.taxYear} so={report.so} pending={report.soPending} error={report.soError} />
             </div>
-            {perps && <OtherPlatforms rows={others} onChange={updateOthers} crossExchange={crossExchange} />}
+            <OtherPlatforms rows={others} onChange={updateOthers} />
           </section>
 
-          {arbitrage && (
+          {hedged.length > 0 && (
             <section className="grid gap-4">
               <h2 className="text-lg font-semibold">Funding-rate arbitrage</h2>
               <p className="text-sm text-muted">
-                The tax office doesn&apos;t see a strategy, only its legs. Each perp leg is its own Termingeschäft in Anlage KAP
-                {selection.arbKinds.includes("cashAndCarry") ? "; each spot leg is a private disposal in Anlage SO, and the two can't offset each other" : ""}.
+                This wallet held opposite positions on Phoenix and Jupiter at the same time. The tax office doesn&apos;t see a strategy, only its legs: each
+                perp leg is its own Termingeschäft in Anlage KAP, and spot legs of a spot + perp trade go to Anlage SO.
               </p>
-              <FundingCard report={report} arbitrage />
-              {selection.arbKinds.includes("crossExchange") && (
-                <div className="grid gap-2">
-                  <h3 className="text-sm font-medium text-muted">Hedged markets found on-chain</h3>
-                  <HedgedMarkets report={report} />
-                </div>
-              )}
-              {selection.arbKinds.includes("cashAndCarry") && (
-                <p className="text-sm text-muted">Spot + perp: the perp legs are in Anlage KAP, the spot legs in Anlage SO (see spot disposals below).</p>
-              )}
+              <HedgedMarkets report={report} />
             </section>
           )}
 
-          {perps && (
+          {hasPerps && (
             <section className="grid gap-4">
-              <h2 className="text-lg font-semibold">{arbitrage && !selection.types.includes("perps") ? "Perp legs" : "Perpetual futures"}</h2>
-              {!arbitrage && <FundingCard report={report} arbitrage={false} />}
+              <h2 className="text-lg font-semibold">Perpetual futures</h2>
+              <FundingCard report={report} arbitrage={hedged.length > 0} />
               <PositionsTable report={report} />
             </section>
           )}
 
-          {spot && report.so && (
+          {report.so && report.so.disposals.length > 0 && (
             <section className="grid gap-4">
-              <h2 className="text-lg font-semibold">{selection.types.includes("spot") ? "Spot disposals" : "Spot legs"}</h2>
+              <h2 className="text-lg font-semibold">Spot disposals</h2>
               <SpotDisposals so={report.so} />
             </section>
           )}
 
           <section className="grid gap-3">
             <h2 className="text-lg font-semibold">Downloads</h2>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={downloadReceipt} className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg">
-                Receipt PDF (for the Finanzamt)
+            <div className={`${card} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between`}>
+              <div>
+                <p className="text-sm font-medium">Receipt for the Finanzamt</p>
+                <p className="mt-1 text-xs text-muted">
+                  PDF in German with the numbers above, the method, and every trade linked to its Solana transaction. Keep it with your tax return and send it
+                  if the Finanzamt asks for proof.
+                </p>
+              </div>
+              <button
+                onClick={downloadReceipt}
+                disabled={report.soPending}
+                className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-50"
+              >
+                {report.soPending ? "Waiting for spot…" : "Download PDF"}
               </button>
-              <button onClick={() => download(`${prefix}-positions.csv`, report.csv.positions)} className={button}>
-                Positions CSV
-              </button>
-              <button onClick={() => download(`${prefix}-ledger.csv`, report.csv.ledger)} className={button}>
-                Ledger with signatures CSV
-              </button>
-              <button onClick={() => download(`${prefix}-koinly.csv`, report.csv.koinly)} className={button}>
-                Koinly CSV
-              </button>
+            </div>
+            <div className="grid gap-2">
+              <p className="text-xs text-muted">Only if you need them:</p>
+              {[
+                [
+                  "Positions CSV",
+                  "One row per position. For checking the numbers yourself or with a tax advisor.",
+                  `${prefix}-positions.csv`,
+                  report.csv.positions,
+                ],
+                [
+                  "Ledger CSV",
+                  "Every trade with its transaction signature and ECB rate. The full detail, e.g. for Excel.",
+                  `${prefix}-ledger.csv`,
+                  report.csv.ledger,
+                ],
+                ["Koinly CSV", "Only if you use Koinly: import it there as a custom CSV.", `${prefix}-koinly.csv`, report.csv.koinly],
+              ].map(([label, text, file, content]) => (
+                <div key={file} className="flex items-center justify-between gap-3 border-t border-line pt-2">
+                  <p className="text-sm">
+                    {label}
+                    <span className="block text-xs text-muted">{text}</span>
+                  </p>
+                  <button onClick={() => download(file, content)} className={`${button} shrink-0`}>
+                    Download
+                  </button>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -283,6 +323,7 @@ export default function Home() {
           </section>
         </div>
       )}
+      {loading && <ProgressPanel steps={steps} elapsed={elapsed} />}
     </main>
   );
 }

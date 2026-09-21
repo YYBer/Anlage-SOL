@@ -26,27 +26,17 @@ export function saveOthers(wallet: string, year: number, rows: OtherRow[]) {
   }
 }
 
-export function OtherPlatforms({
-  rows,
-  onChange,
-  crossExchange,
-}: {
-  rows: OtherRow[];
-  onChange: (rows: OtherRow[]) => void;
-  /** User said they trade perp vs perp across platforms: explain why this matters for them. */
-  crossExchange: boolean;
-}) {
+export function OtherPlatforms({ rows, onChange }: { rows: OtherRow[]; onChange: (rows: OtherRow[]) => void }) {
   const update = (i: number, patch: Partial<OtherRow>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const hasValues = rows.some((r) => r.gains.trim() || r.losses.trim());
 
   return (
-    <section className={`${card} ${crossExchange && !hasValues ? "border-accent" : ""}`}>
+    <section className={card}>
       <h2 className="text-sm font-medium">Other platforms</h2>
       <p className="mt-1 text-xs text-muted">
-        {crossExchange
-          ? "Your cross-platform trades have a leg we can't read (Hyperliquid, Drift, a foreign exchange). Enter that platform's gains and losses in EUR; they go into the same KAP lines."
-          : "Perp or futures results from platforms we don't read (Hyperliquid, Drift, a foreign exchange). Take gains and losses in EUR from that platform's report."}{" "}
-        Leave out German brokers that already withheld tax.
+        Perp or futures results from platforms we don&apos;t read (Hyperliquid, Lighter, a foreign exchange), e.g. the other leg of a cross-platform funding
+        trade. Take gains and losses in EUR from that platform&apos;s report; they go into the same KAP lines. Leave out German brokers that already withheld
+        tax.
       </p>
 
       {rows.length > 0 && (
@@ -82,7 +72,12 @@ export function OtherPlatforms({
                 aria-label="Losses in EUR"
                 className={`${input} text-right font-mono`}
               />
-              <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label="Remove platform" className={`${button} col-span-2 text-muted sm:col-span-1`}>
+              <button
+                type="button"
+                onClick={() => onChange(rows.filter((_, j) => j !== i))}
+                aria-label="Remove platform"
+                className={`${button} col-span-2 text-muted sm:col-span-1`}
+              >
                 ×
               </button>
             </div>

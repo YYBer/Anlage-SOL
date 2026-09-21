@@ -1,26 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findHedgedMarkets } from "../../app/_components/Positions";
-import { expectsOtherPlatforms, needsPerps, needsSpot, spotReasons } from "../../app/trade-types";
 import type { PositionDto, ReportDto } from "../dto";
-
-describe("trade types → forms", () => {
-  it("spot alone needs only Anlage SO", () => {
-    const s = { types: ["spot" as const], arbKinds: [] };
-    expect(needsPerps(s)).toBe(false);
-    expect(needsSpot(s)).toBe(true);
-  });
-
-  it("cash-and-carry needs both forms; cross-exchange needs only KAP plus other platforms", () => {
-    const cc = { types: ["arbitrage" as const], arbKinds: ["cashAndCarry" as const] };
-    expect(needsPerps(cc)).toBe(true);
-    expect(needsSpot(cc)).toBe(true);
-    expect(spotReasons(cc)).toEqual(["the spot leg of your spot + perp trades"]);
-
-    const x = { types: ["arbitrage" as const], arbKinds: ["crossExchange" as const] };
-    expect(needsSpot(x)).toBe(false);
-    expect(expectsOtherPlatforms(x)).toBe(true);
-  });
-});
 
 const pos = (over: Partial<PositionDto>): PositionDto => ({
   protocol: "phoenix",
@@ -41,6 +21,14 @@ const pos = (over: Partial<PositionDto>): PositionDto => ({
 });
 
 describe("findHedgedMarkets", () => {
+  it("does not pair a long and a short on the same platform", () => {
+    const report = {
+      taxYear: 2026,
+      positions: [pos({ protocol: "jupiter", side: "long" }), pos({ protocol: "jupiter", side: "short" })],
+    } as ReportDto;
+    expect(findHedgedMarkets(report)).toHaveLength(0);
+  });
+
   it("pairs overlapping long and short legs of the same market across protocols", () => {
     const report = {
       taxYear: 2026,

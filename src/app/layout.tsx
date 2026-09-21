@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Perpelster",
-  description: "Tax reports for Solana perp traders: Anlage KAP line items for ELSTER with on-chain receipts.",
+  title: "Perpelster — Your perp trades, ready for ELSTER",
+  description: "Your perp trades, ready for ELSTER. Jupiter and Phoenix trades turned into German tax reports — no spreadsheets, no manual tagging.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

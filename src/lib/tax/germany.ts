@@ -9,7 +9,7 @@ import { berlinYear } from "../core/time";
 // Anlage KAP line numbers change between years: verify against the official form before filing.
 
 export const KAP_LINES: Record<number, { foreignIncome: number; containedLosses: number; verified: boolean }> = {
-  2025: { foreignIncome: 19, containedLosses: 22, verified: false },
+  2025: { foreignIncome: 19, containedLosses: 22, verified: true },
   2026: { foreignIncome: 19, containedLosses: 22, verified: false },
 };
 

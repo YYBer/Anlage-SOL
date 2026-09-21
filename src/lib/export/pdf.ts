@@ -289,6 +289,7 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
         [
           "Veräußert (Berlin)",
           "Token",
+          "Handelsplatz",
           "Menge",
           "Angeschafft",
           "Haltedauer",
@@ -303,6 +304,7 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
       body: so.disposals.map((d) => [
         dt(d.time),
         d.token,
+        d.venue,
         num(d.amount, 6),
         (d.acquiredAt ? berlinDate(d.acquiredAt) : "unbekannt") + (d.basisKnown ? "" : " *"),
         `${d.holdingDays} T`,
@@ -314,15 +316,15 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
         shortSig(d.signature),
       ]),
       columnStyles: {
-        2: { halign: "right" },
-        5: { halign: "right" },
+        3: { halign: "right" },
         6: { halign: "right" },
         7: { halign: "right" },
         8: { halign: "right" },
-        10: { textColor: ACCENT },
+        9: { halign: "right" },
+        11: { textColor: ACCENT },
       },
       didDrawCell: linkColumn(
-        10,
+        11,
         so.disposals.map((d) => d.signature),
       ),
     });

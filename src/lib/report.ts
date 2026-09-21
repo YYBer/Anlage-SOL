@@ -1,5 +1,6 @@
 import { createJupiterAdapter, type JupiterOptions } from "./adapters/jupiter";
 import { phoenix } from "./adapters/phoenix";
+import type { OnProgress } from "./core/progress";
 import type { Adapter, Protocol, WalletHistory } from "./core/types";
 import { fetchSpotHistory, type SpotFetchOptions } from "./spot/history";
 import { loadPriceBook } from "./spot/prices";
@@ -12,6 +13,7 @@ import { taxYearEnd, taxYearStart } from "./core/time";
 export interface FetchOptions {
   jupiter?: JupiterOptions;
   spot?: SpotFetchOptions;
+  onProgress?: OnProgress;
 }
 
 export function adapterFor(protocol: Protocol, opts: FetchOptions = {}): Adapter {
@@ -20,7 +22,7 @@ export function adapterFor(protocol: Protocol, opts: FetchOptions = {}): Adapter
 
 /** Fetches every protocol and merges into one history; one failing protocol becomes a warning. */
 export async function fetchWallet(wallet: string, protocols: Protocol[], opts: FetchOptions = {}): Promise<WalletHistory> {
-  const results = await Promise.allSettled(protocols.map((p) => adapterFor(p, opts).fetchHistory(wallet)));
+  const results = await Promise.allSettled(protocols.map((p) => adapterFor(p, opts).fetchHistory(wallet, { onProgress: opts.onProgress })));
   const merged: WalletHistory = { wallet, fills: [], funding: [], collateral: [], warnings: [] };
   results.forEach((r, i) => {
     if (r.status === "rejected") {
@@ -59,6 +61,8 @@ export async function germanySoReport(wallet: string, taxYear: number, opts: Spo
   const warnings = [...spot.warnings];
   const fx = await loadEcbFx(first, yearEnd);
   const mints = spot.movements.flatMap((m) => [...m.deltas.keys()]);
+  opts.onProgress?.({ source: "prices", message: "Loading token prices" });
   const prices = await loadPriceBook(mints, first, yearEnd, fx, warnings);
+  opts.onProgress?.({ source: "prices", message: "Token prices loaded", finished: true });
   return buildSoReport(spot.movements, prices, taxYear, warnings);
 }

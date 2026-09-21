@@ -10,9 +10,9 @@ import { berlinDate, berlinYear } from "../core/time";
 
 export const FREIGRENZE_EUR = 1000;
 
-// Anlage SO 2025 per the Blockpit ELSTER guide; verify against the official form.
+// Anlage SO 2025 checked against the official form (formulare-bfinv.de, 2026-09); later years still need checking.
 export const SO_LINES: Record<number, { flag: number; name: number; period: number; proceeds: number; costs: number; fees: number; result: number; total: number; verified: boolean }> = {
-  2025: { flag: 45, name: 46, period: 47, proceeds: 48, costs: 49, fees: 50, result: 51, total: 58, verified: false },
+  2025: { flag: 45, name: 46, period: 47, proceeds: 48, costs: 49, fees: 50, result: 51, total: 58, verified: true },
   2026: { flag: 45, name: 46, period: 47, proceeds: 48, costs: 49, fees: 50, result: 51, total: 58, verified: false },
 };
 
@@ -159,6 +159,7 @@ export function computeDisposals(movements: Movement[], prices: PriceBook): SoCo
         disposals.push({
           time: m.time.toISOString(),
           token: tokenSymbol(o.mint),
+          venue: m.venue,
           amount,
           acquiredAt: earliest?.toISOString() ?? null,
           holdingDays: earliest ? Math.floor((m.time.getTime() - earliest.getTime()) / 86_400_000) : 0,
@@ -233,6 +234,7 @@ export function buildSoReport(movements: Movement[], prices: PriceBook, taxYear:
     disposals: inYear.map((d) => ({
       time: d.time,
       token: d.token,
+      venue: d.venue,
       amount: d.amount,
       acquiredAt: d.acquiredAt,
       holdingDays: d.holdingDays,

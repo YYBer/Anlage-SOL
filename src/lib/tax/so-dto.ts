@@ -3,6 +3,8 @@
 export interface SoDisposalDto {
   time: string;
   token: string;
+  /** Where the swap happened, e.g. "Jupiter" or "pump.fun (via bot)". */
+  venue: string;
   amount: number;
   /** Earliest lot consumed; null when the cost basis is unknown. */
   acquiredAt: string | null;

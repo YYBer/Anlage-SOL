@@ -42,21 +42,24 @@ export function KapCard({ report, totals, othersIncluded }: { report: ReportDto;
   );
 }
 
-export function SoCard({ taxYear, reasons, so, error }: { taxYear: number; reasons: string[]; so?: SoReportDto | null; error?: string }) {
+export function SoCard({ taxYear, so, pending, error }: { taxYear: number; so?: SoReportDto | null; pending?: boolean; error?: string }) {
   return (
-    <div className={`${card} ${reasons.length ? "" : "opacity-70"}`}>
+    <div className={card}>
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-sm font-medium">Anlage SO {taxYear}</h2>
         <span className="text-xs text-muted">Spot · spot legs · § 23 EStG</span>
       </div>
-      {!reasons.length ? (
-        <p className="mt-4 text-sm text-muted">Not needed for what you selected.</p>
+      {pending ? (
+        <p className="mt-4 flex items-center gap-2 text-sm text-muted">
+          <span className="size-3 animate-spin rounded-full border-2 border-accent border-t-transparent" aria-hidden />
+          Reading spot history… (progress at the bottom of the screen)
+        </p>
       ) : error ? (
         <p className="mt-4 text-sm text-bad">Spot history could not be read: {error}</p>
       ) : !so ? (
-        <p className="mt-4 text-sm text-muted">Generate the report again to include spot trades.</p>
+        <p className="mt-4 text-sm text-muted">Spot was not read for this report.</p>
       ) : !so.lines.length ? (
-        <p className="mt-4 text-sm">No taxable disposals in {taxYear}.</p>
+        <p className="mt-4 text-sm text-muted">No taxable spot disposals in {taxYear}: nothing to enter.</p>
       ) : (
         <>
           <dl className="mt-4 grid gap-2">
@@ -78,7 +81,7 @@ export function SoCard({ taxYear, reasons, so, error }: { taxYear: number; reaso
             </p>
             {so.taxFreeGainEur !== 0 && <p>Tax-free after one year of holding: {eur(so.taxFreeGainEur)} (not in the lines above)</p>}
             {so.belowFreigrenze && <p className="text-good">Below the 1.000 € Freigrenze: tax-free if all your private disposals stay below it.</p>}
-            {reasons.length > 0 && <p>Needed for {reasons.join(" and ")}. Spot losses only offset spot gains.</p>}
+            <p>Spot losses only offset spot gains, never the KAP result.</p>
             {!so.linesVerified && <p className="text-warn">Line numbers not yet checked against the official {taxYear} form.</p>}
           </div>
         </>
@@ -107,9 +110,7 @@ export function FundingCard({ report, arbitrage }: { report: ReportDto; arbitrag
           )}
         </>
       ) : (
-        <p className="mt-3 text-sm">
-          Included in the KAP result ({report.fundingPayments} periodic payments plus borrow fees charged on fills).
-        </p>
+        <p className="mt-3 text-sm">Included in the KAP result ({report.fundingPayments} periodic payments plus borrow fees charged on fills).</p>
       )}
     </div>
   );

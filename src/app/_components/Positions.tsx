@@ -64,8 +64,9 @@ interface HedgedMarket {
 }
 
 /**
- * Markets where the wallet held a long and a short at the same time, e.g. long SOL on Jupiter and short
- * SOL on Phoenix. Only for display: tax-wise every leg stays its own Termingeschäft.
+ * Markets where the wallet held a long on one platform and a short on another at the same time, e.g. long SOL
+ * on Jupiter and short SOL on Phoenix. Hedges within one platform are not paired (not supported yet).
+ * Only for display: tax-wise every leg stays its own Termingeschäft.
  */
 export function findHedgedMarkets(report: ReportDto): HedgedMarket[] {
   const yearEnd = taxYearEnd(report.taxYear).getTime();
@@ -81,7 +82,7 @@ export function findHedgedMarkets(report: ReportDto): HedgedMarket[] {
 
   const out: HedgedMarket[] = [];
   for (const [market, ps] of byMarket) {
-    const legs = ps.filter((p) => ps.some((q) => q !== p && q.side !== p.side && overlaps(p, q)));
+    const legs = ps.filter((p) => ps.some((q) => q.protocol !== p.protocol && q.side !== p.side && overlaps(p, q)));
     if (legs.length) out.push({ market, legs, resultEur: legs.reduce((s, l) => s + l.resultEur, 0) });
   }
   return out;
@@ -90,7 +91,7 @@ export function findHedgedMarkets(report: ReportDto): HedgedMarket[] {
 export function HedgedMarkets({ report }: { report: ReportDto }) {
   const hedged = findHedgedMarkets(report);
   if (!hedged.length) {
-    return <p className="text-sm text-muted">No overlapping long and short positions found in the wallet&apos;s on-chain perps for {report.taxYear}.</p>;
+    return <p className="text-sm text-muted">No overlapping long and short positions on Phoenix and Jupiter found for {report.taxYear}.</p>;
   }
   return (
     <div className="overflow-x-auto rounded-xl border border-line">

@@ -3,6 +3,7 @@ import type { WalletHistory } from "./core/types";
 import type { FxTable } from "./tax/fx";
 import type { GermanyReport } from "./tax/germany";
 import type { SoReportDto } from "./tax/so-dto";
+import type { Progress } from "./core/progress";
 import { berlinMonth, berlinYear } from "./core/time";
 
 // JSON-safe view of a report for the browser.
@@ -85,7 +86,17 @@ export interface ReportDto {
   /** Present when the request asked for spot (Anlage SO). */
   so?: SoReportDto | null;
   soError?: string;
+  /** Spot history is still being read; a later stream line carries the full report. */
+  soPending?: boolean;
 }
+
+/** POST /api/report streams one JSON object per line: progress while fetching, then one result or error. */
+export type ReportStreamLine =
+  | { type: "progress"; progress: Progress }
+  /** Perps are done; spot (Anlage SO) is still loading. */
+  | { type: "partial"; report: ReportDto }
+  | { type: "result"; report: ReportDto }
+  | { type: "error"; error: string };
 
 function fundingByMonth(report: GermanyReport): FundingMonthDto[] {
   const rows = new Map<string, FundingMonthDto>();

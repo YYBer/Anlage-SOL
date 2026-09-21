@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Movement } from "../spot/history";
 import type { PriceBook } from "../spot/prices";
 import { SOL_MINT } from "../spot/tokens";
+import { detectVenue } from "../spot/venues";
 import { buildSoReport, computeDisposals, heldOverOneYear } from "../tax/germany-so";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -23,6 +24,7 @@ const mv = (time: string, deltas: Record<string, number>, kind: Movement["kind"]
   deltas: new Map(Object.entries(deltas)),
   feeSol,
   kind,
+  venue: "Jupiter",
 });
 
 describe("heldOverOneYear", () => {
@@ -82,6 +84,22 @@ describe("FIFO disposals", () => {
       prices,
     );
     expect(disposals).toHaveLength(0);
+  });
+});
+
+describe("detectVenue", () => {
+  const PUMP = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+  const JUP = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
+  const BOT = "6Vo3245eszAb5wuqEMw8mGdbfRUdKbHhDHP5LcaGuTAB";
+  const CB = "ComputeBudget111111111111111111111111111111";
+
+  it("names the aggregator the user chose, not the pools it routed to", () => {
+    expect(detectVenue([CB, JUP], [PUMP])).toBe("Jupiter");
+  });
+
+  it("marks trades a bot routed into pump.fun (real case: wallet 3gg6Bx…)", () => {
+    expect(detectVenue([CB, BOT], [PUMP])).toBe("pump.fun (via bot)");
+    expect(detectVenue([CB, PUMP], [])).toBe("pump.fun");
   });
 });
 

@@ -1,3 +1,5 @@
+import type { OnProgress } from "./progress";
+
 // Protocol-neutral records. Every adapter maps its native data into these,
 // and everything downstream (position grouping, tax, exports) only sees these.
 
@@ -82,5 +84,5 @@ export interface Position {
 
 export interface Adapter {
   protocol: Protocol;
-  fetchHistory(wallet: string, opts?: { since?: Date; until?: Date }): Promise<WalletHistory>;
+  fetchHistory(wallet: string, opts?: { since?: Date; until?: Date; onProgress?: OnProgress }): Promise<WalletHistory>;
 }

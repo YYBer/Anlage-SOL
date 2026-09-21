@@ -1,5 +1,7 @@
 import { BorshEventCoder, utils, type Idl } from "@coral-xyz/anchor";
 import { Connection, PublicKey, type VersionedTransactionResponse } from "@solana/web3.js";
+import { isPublicRpc, limitedCall, mapLimited, rpcLimiter } from "../../core/limiter";
+import { cachedTransaction, getTransactionCached } from "../../core/tx-cache";
 import type { Adapter, Fill, Side, WalletHistory } from "../../core/types";
 import idl from "./idl.json";
 
@@ -61,11 +63,9 @@ export interface DecodedEvent {
 export function decodeEvents(tx: VersionedTransactionResponse): DecodedEvent[] {
   const meta = tx.meta;
   if (!meta?.innerInstructions) return [];
-  const keys = [
-    ...tx.transaction.message.staticAccountKeys,
-    ...(meta.loadedAddresses?.writable ?? []),
-    ...(meta.loadedAddresses?.readonly ?? []),
-  ].map((k) => k.toBase58());
+  const keys = [...tx.transaction.message.staticAccountKeys, ...(meta.loadedAddresses?.writable ?? []), ...(meta.loadedAddresses?.readonly ?? [])].map((k) =>
+    k.toBase58(),
+  );
   const out: DecodedEvent[] = [];
   for (const group of meta.innerInstructions) {
     for (const ix of group.instructions) {
@@ -120,44 +120,31 @@ export interface JupiterOptions {
   rpcUrl?: string;
   /** Upper bound on signatures fetched per position slot. */
   maxSignaturesPerSlot?: number;
-  /** Delay between RPC calls; public RPC needs ~400ms, paid RPC can use 0. */
-  throttleMs?: number;
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function createJupiterAdapter(opts: JupiterOptions = {}): Adapter {
   const rpcUrl = opts.rpcUrl ?? process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
   const conn = new Connection(rpcUrl, { commitment: "confirmed", disableRetryOnRateLimit: true });
   const maxSigs = opts.maxSignaturesPerSlot ?? 5000;
-  const throttle = opts.throttleMs ?? (rpcUrl.includes("api.mainnet-beta") ? 400 : 0);
-
-  async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const r = await fn();
-        if (throttle) await sleep(throttle);
-        return r;
-      } catch (e) {
-        if (attempt >= 6) throw e;
-        await sleep(1000 * 2 ** Math.min(attempt, 4));
-      }
-    }
-  }
+  const limiter = rpcLimiter(rpcUrl);
 
   return {
     protocol: "jupiter",
-    async fetchHistory(wallet): Promise<WalletHistory> {
+    async fetchHistory(wallet, fetchOpts = {}): Promise<WalletHistory> {
+      const report = fetchOpts.onProgress ?? (() => {});
       const warnings: string[] = [];
       const fills: Fill[] = [];
 
+      // 1. Signatures of all 9 position slots, then 2. every transaction in one paced batch.
+      const work: { slot: PositionSlot; signature: string }[] = [];
+      report({ source: "jupiter", message: "Listing position transactions" });
       for (const slot of positionSlots(wallet)) {
         const sigs: string[] = [];
         let before: string | undefined;
         let capped = false;
         while (true) {
           const limit = Math.min(1000, maxSigs - sigs.length);
-          const page = await withRetry(() => conn.getSignaturesForAddress(slot.pda, { before, limit }));
+          const page = await limitedCall(limiter, () => conn.getSignaturesForAddress(slot.pda, { before, limit }));
           sigs.push(...page.filter((s) => !s.err).map((s) => s.signature));
           if (page.length < limit) break;
           if (sigs.length >= maxSigs) {
@@ -170,17 +157,34 @@ export function createJupiterAdapter(opts: JupiterOptions = {}): Adapter {
           warnings.push(`Jupiter ${slot.market}-${slot.side} (${slot.collateral}): capped at ${maxSigs} signatures; older history skipped.`);
         }
 
-        for (const signature of sigs) {
-          const tx = await withRetry(() => conn.getTransaction(signature, { maxSupportedTransactionVersion: 0 }));
-          if (!tx?.blockTime) continue;
-          for (const ev of decodeEvents(tx)) {
-            const key = ev.data.positionKey as PublicKey | undefined;
-            if (!key?.equals?.(slot.pda)) continue;
-            const fill = eventToFill(ev, slot, new Date(tx.blockTime * 1000), signature);
-            if (fill) fills.push(fill);
-          }
-        }
+        work.push(...sigs.map((signature) => ({ slot, signature })));
       }
+
+      const missing = work.filter((w) => !cachedTransaction(w.signature));
+      const total = missing.length;
+      const label = `Reading ${total} new of ${work.length} transactions${isPublicRpc(rpcUrl) && total ? " (public RPC: ~1 per second)" : ""}`;
+      report({ source: "jupiter", message: label, done: 0, total, etaSeconds: Math.round(total / limiter.rate()) });
+      await mapLimited(
+        missing,
+        limiter,
+        ({ signature }) => getTransactionCached(conn, signature),
+        (done) => {
+          if (done === total || done % Math.max(1, Math.floor(total / 40)) === 0)
+            report({ source: "jupiter", message: label, done, total, etaSeconds: Math.round((total - done) / limiter.rate()) });
+        },
+      );
+      const txs = await Promise.all(work.map((w) => getTransactionCached(conn, w.signature)));
+      txs.forEach((tx, i) => {
+        if (!tx?.blockTime) return;
+        const { slot, signature } = work[i];
+        for (const ev of decodeEvents(tx)) {
+          const key = ev.data.positionKey as PublicKey | undefined;
+          if (!key?.equals?.(slot.pda)) continue;
+          const fill = eventToFill(ev, slot, new Date(tx.blockTime * 1000), signature);
+          if (fill) fills.push(fill);
+        }
+      });
+      report({ source: "jupiter", message: `${fills.length} fills`, done: total, total, finished: true });
 
       fills.sort((a, b) => a.time.getTime() - b.time.getTime());
       // Collateral for longs is SOL/ETH/BTC and swaps happen inside Jupiter; tracked separately later.

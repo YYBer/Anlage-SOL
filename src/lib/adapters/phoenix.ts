@@ -63,6 +63,7 @@ async function paginate<T>(
   timeOf: (item: T) => Date,
   since: Date | undefined,
   warnings: string[],
+  onPage?: (count: number) => void,
 ): Promise<T[]> {
   const out: T[] = [];
   let cursor: string | null | undefined;
@@ -73,6 +74,7 @@ async function paginate<T>(
     if (!body) return out;
     const items = pick(body);
     out.push(...items);
+    onPage?.(out.length);
     const oldest = items.at(-1);
     if (since && oldest && timeOf(oldest) < since) return out;
     if (!body.hasMore || !body.nextCursor) return out;
@@ -142,10 +144,16 @@ export const phoenix: Adapter = {
     const base = `${API}/v1/trader/${wallet}`;
     const inRange = (d: Date) => (!opts.since || d >= opts.since) && (!opts.until || d < opts.until);
 
+    const report = opts.onProgress ?? (() => {});
     // Sequential on purpose: parallel pagination of the three endpoints trips Phoenix's rate limit.
-    const trades = await paginate<TradeItem>(`${base}/trades-history`, (b) => b.data as TradeItem[], (t) => new Date(t.timestamp), opts.since, warnings);
-    const funding = await paginate<FundingItem>(`${base}/funding-history`, (b) => b.events as FundingItem[], (f) => new Date(f.timestamp), opts.since, warnings);
+    const trades = await paginate<TradeItem>(`${base}/trades-history`, (b) => b.data as TradeItem[], (t) => new Date(t.timestamp), opts.since, warnings, (n) =>
+      report({ source: "phoenix", message: `${n} trades` }),
+    );
+    const funding = await paginate<FundingItem>(`${base}/funding-history`, (b) => b.events as FundingItem[], (f) => new Date(f.timestamp), opts.since, warnings, (n) =>
+      report({ source: "phoenix", message: `${trades.length} trades · ${n} funding payments` }),
+    );
     const collateral = await paginate<CollateralItem>(`${base}/collateral-history`, (b) => b.data as CollateralItem[], (c) => new Date(c.timestamp), opts.since, warnings);
+    report({ source: "phoenix", message: `${trades.length} trades · ${funding.length} funding payments`, finished: true });
 
     // Position grouping needs full history even before `since`, so fills are not range-filtered here.
     const fills = trades

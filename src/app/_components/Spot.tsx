@@ -15,11 +15,12 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
         </ul>
       )}
       <div className="overflow-x-auto rounded-xl border border-line">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[860px] text-sm">
           <thead className="bg-panel text-left text-xs text-muted">
             <tr>
               <th className="px-3 py-2 font-medium">Sold</th>
               <th className="px-3 py-2 font-medium">Token</th>
+              <th className="px-3 py-2 font-medium">Venue</th>
               <th className="px-3 py-2 text-right font-medium">Amount</th>
               <th className="px-3 py-2 font-medium">Acquired</th>
               <th className="px-3 py-2 text-right font-medium">Proceeds</th>
@@ -33,6 +34,7 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
               <tr key={i} className="border-t border-line">
                 <td className="px-3 py-2 tabular-nums">{day(d.time)}</td>
                 <td className="px-3 py-2 font-medium">{d.token}</td>
+                <td className="px-3 py-2 text-muted">{d.venue}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{amount(d.amount)}</td>
                 <td className="px-3 py-2 tabular-nums">
                   {d.acquiredAt ? day(d.acquiredAt) : "unknown"}
@@ -55,7 +57,7 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
             ))}
             {!so.disposals.length && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-muted">
+                <td colSpan={9} className="px-3 py-6 text-center text-muted">
                   No spot disposals in {so.taxYear}.
                 </td>
               </tr>
@@ -63,7 +65,9 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
           </tbody>
         </table>
       </div>
-      {unknown > 0 && <p className="text-xs text-muted">{unknown} disposals use tokens that arrived by transfer; add their purchase price from your exchange records.</p>}
+      {unknown > 0 && (
+        <p className="text-xs text-muted">{unknown} disposals use tokens that arrived by transfer; add their purchase price from your exchange records.</p>
+      )}
     </div>
   );
 }

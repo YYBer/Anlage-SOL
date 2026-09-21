@@ -1,5 +1,8 @@
 # Perpelster
 
+> **Deine Perp-Trades. Fertig für ELSTER.**
+> Jupiter- und Phoenix-Trades als deutsche Steuerberichte — ohne Excel, ohne manuelles Taggen.
+
 Tax reports for Solana perp traders, starting with Germany: enter a wallet, pick a tax year, get
 Anlage KAP line items for ELSTER, a ledger in which every fill links to its on-chain transaction, and a Koinly CSV.
 
@@ -9,15 +12,27 @@ Anlage KAP line items for ELSTER, a ledger in which every fill links to its on-c
 npm install
 npm run dev                 # web UI on http://localhost:3000
 npm test                    # unit tests
-npm run report -- <wallet> --year 2026 --protocols phoenix,jupiter [--funding include] [--max-sigs 200] [--spot] \
+npm run report -- <wallet> --year 2026 [--protocols phoenix,jupiter] [--funding include] [--max-sigs 200] [--no-spot] \
   [--other "Hyperliquid:120.50:40"]   # label:gainsEur:lossesEur, repeatable
 ```
 
-Copy `.env.example` to `.env.local` and set `SOLANA_RPC_URL` to a paid RPC for Jupiter.
+Copy `.env.example` to `.env.local`. Speed depends on the RPC (measured 2026-09-21, 173-transaction wallet):
+
+| | First query | Same wallet again |
+|---|---|---|
+| Public RPC (~1 `getTransaction`/s) | 3–5 min | ~1 s (transactions are cached in the server process) |
+| Helius free tier (~10 req/s) | ~20 s (estimated) | ~1 s |
+
+The API streams progress (`application/x-ndjson`), and the page shows it in a status bar at the bottom of the screen.
+
+The page asks only for the wallet, the tax year and how to treat funding. It always reads everything (Phoenix,
+Jupiter Perps and spot on any DEX), because a venue the user forgets to tick would silently understate the report.
+Perps come back first as a partial result; spot follows and skips transactions already known as perp fills
+(measured on the perp sample wallet: 145 of 191 transactions skipped, full report in 12 s with a warm cache).
 
 Sample wallets (found on mainnet, not ours):
 - Phoenix: `wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw`
-- Spot (Jupiter swaps, memecoins): `3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D`
+- Spot: `3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D`, a memecoin trader: 105 of 173 transactions go through a trading-bot router into pump.fun / PumpSwap, 36 through Jupiter, a few via DFlow; no perps
 - Jupiter: `YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7` (very active; use `--max-sigs`)
 
 ## Layout
@@ -51,17 +66,19 @@ scripts/report.ts        CLI
   2026-12-31 23:30 UTC belongs to 2027. CSV timestamps stay in UTC; the PDF shows Berlin time.
 - Each reducing fill counts as a (partial) Glattstellung in the year it happens. Opening fees are released
   pro rata to the size closed.
-- Anlage KAP: line 19 = net result, line 22 = contained losses. **Line numbers not yet checked against the official form.**
+- Anlage KAP: line 19 = net result (ausländische Kapitalerträge), line 22 = contained losses (darin enthaltene Verluste ohne
+  Aktienveräußerungsverluste). Checked against the 2025 form (2026-09): since JStG 2024 the separate Termingeschäft lines
+  (2024: lines 21 and 24) are gone, so perp gains and losses go only into lines 19 and 22. The 2026 form is not out yet; recheck then.
 - Other platforms (Hyperliquid, CEX, …): the user enters gains/losses in EUR; they are added to both KAP lines (`tax/kap.ts`).
 - Funding: `separate` (default, listed apart) or `include` (part of the derivative result). There is no official guidance, so the choice is left to the user.
 - EUR via ECB reference rate of the German trading day (last published rate on weekends/holidays); USDC/USDT treated as USD.
 
 ## Anlage SO (spot)
 
-- Reads every transaction of the wallet and nets the wallet's token balance changes; tokens out + tokens in = a swap (disposal + acquisition), independent of the DEX. Perp program transactions are excluded (they are KAP).
+- Reads every transaction of the wallet and nets the wallet's token balance changes; tokens out + tokens in = a swap (disposal + acquisition). It works the same whether the user traded on Jupiter, pump.fun or through a trading bot, because it doesn't depend on the DEX. The venue (`spot/venues.ts`) is shown for information only. Perp program transactions are excluded (they are KAP).
 - FIFO per token over the full history; > 1 year holding is tax-free; 1.000 € Freigrenze noted.
 - Prices: stablecoins via ECB; others via CoinGecko daily EUR (public API: last 365 days, set `COINGECKO_API_KEY` for more); unpriced tokens valued by the other side of the swap.
-- Incoming transfers of non-stablecoins have unknown cost and are set to 0 € (flagged). Anlage SO lines 45–51/58 follow the Blockpit 2025 guide, not yet checked against the official form.
+- Incoming transfers of non-stablecoins have unknown cost and are set to 0 € (flagged). Anlage SO lines 45–51/58 checked against the official 2025 form (2026-09); the 2026 form is not out yet.
 
 ## Roadmap
 
@@ -71,6 +88,10 @@ scripts/report.ts        CLI
   - GMTrade
   - Pacifica: off-chain matching; its public API (`/api/v1/trades/history`, `/funding/history`) has PnL and fees per fill
     but no transaction signature, so those rows can't link to an on-chain receipt.
+- **Perp vs perp on one platform** (funding-rate arbitrage type 1): hedges inside one DEX, e.g. long SOL in one Phoenix
+  subaccount and short in another (Phoenix cross margin nets same-market positions within an account), or long and short
+  at once on Jupiter. The legs are already counted in Anlage KAP; missing is the arbitrage option in the UI and pairing
+  of same-platform legs in the hedge view.
 - Jupiter longs collateralized in SOL/ETH/BTC: the internal swap of collateral is not an Anlage SO disposal yet.
 - Staking/airdrop income (§ 22 Nr. 3).
 - Let users enter the purchase price of tokens that arrived by transfer (now 0 €).
