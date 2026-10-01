@@ -3,7 +3,7 @@ import type { Movement } from "../spot/history";
 import type { PriceBook } from "../spot/prices";
 import { SOL_MINT } from "../spot/tokens";
 import { detectVenue } from "../spot/venues";
-import { buildSoReport, computeDisposals, heldOverOneYear } from "../tax/germany-so";
+import { buildSoReport, computeDisposals, heldOverOneYear, transferKey, valueMovements } from "../tax/germany-so";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const MEME = "MeMe1111111111111111111111111111111111111111";
@@ -37,13 +37,12 @@ describe("heldOverOneYear", () => {
 describe("FIFO disposals", () => {
   it("buys SOL with USDC, sells part within a year and part after, splitting taxable and tax-free", () => {
     const { disposals } = computeDisposals(
-      [
+      valueMovements([
         mv("2025-01-01T00:00:00Z", { [USDC]: 2000 }, "in"),
         mv("2025-02-01T00:00:00Z", { [USDC]: -1000, [SOL_MINT]: 10 }, "swap"), // 10 SOL for 800 €
         mv("2025-06-01T00:00:00Z", { [USDC]: -500, [SOL_MINT]: 5 }, "swap"), // 5 SOL for 400 €
         mv("2026-03-01T00:00:00Z", { [SOL_MINT]: -12, [USDC]: 2250 }, "swap"), // sell 12 SOL for 1800 €
-      ],
-      prices,
+      ], prices),
     );
     const sell = disposals.filter((d) => d.token === "SOL");
     expect(sell).toHaveLength(2);
@@ -59,18 +58,17 @@ describe("FIFO disposals", () => {
   });
 
   it("flags disposals without known cost basis", () => {
-    const { disposals } = computeDisposals([mv("2026-02-01T00:00:00Z", { [SOL_MINT]: -1, [USDC]: 150 }, "swap")], prices);
+    const { disposals } = computeDisposals(valueMovements([mv("2026-02-01T00:00:00Z", { [SOL_MINT]: -1, [USDC]: 150 }, "swap")], prices));
     expect(disposals[0]).toMatchObject({ basisKnown: false, costEur: 0, acquiredAt: null });
   });
 
   it("carries cost basis through a swap into an unpriced token", () => {
     const { disposals, warnings } = computeDisposals(
-      [
+      valueMovements([
         mv("2026-01-10T00:00:00Z", { [USDC]: 1000 }, "in"),
         mv("2026-01-11T00:00:00Z", { [USDC]: -1000, [MEME]: 5_000_000 }, "swap"), // valued by USDC: 800 €
         mv("2026-02-11T00:00:00Z", { [MEME]: -5_000_000, [SOL_MINT]: 8 }, "swap"), // valued by SOL: 1200 €
-      ],
-      prices,
+      ], prices),
     );
     const meme = disposals.find((d) => d.token.startsWith("MeMe"))!;
     expect(meme.costEur).toBeCloseTo(800);
@@ -80,8 +78,7 @@ describe("FIFO disposals", () => {
 
   it("treats outgoing transfers as moves, not disposals", () => {
     const { disposals } = computeDisposals(
-      [mv("2026-01-01T00:00:00Z", { [USDC]: 100 }, "in"), mv("2026-01-02T00:00:00Z", { [USDC]: -100 }, "out")],
-      prices,
+      valueMovements([mv("2026-01-01T00:00:00Z", { [USDC]: 100 }, "in"), mv("2026-01-02T00:00:00Z", { [USDC]: -100 }, "out")], prices),
     );
     expect(disposals).toHaveLength(0);
   });
@@ -103,15 +100,44 @@ describe("detectVenue", () => {
   });
 });
 
+describe("cost overrides for transfers", () => {
+  // 10 SOL bought on an exchange in 2024 for 500 €, moved to the wallet in 2026, sold a month later for 1500 €.
+  const arrival = mv("2026-01-10T00:00:00Z", { [SOL_MINT]: 10 }, "in");
+  const sale = mv("2026-02-10T00:00:00Z", { [SOL_MINT]: -10, [USDC]: 1875 }, "swap");
+  const valued = () => valueMovements([arrival, sale], prices);
+  const key = transferKey(arrival.signature, SOL_MINT);
+
+  it("without an override, cost is 0 € and the holding period starts on arrival", () => {
+    const [d] = computeDisposals(valued()).disposals;
+    expect(d).toMatchObject({ basisKnown: false, basisFromUser: false, taxFree: false, costEur: 0 });
+    expect(d.gainEur).toBeCloseTo(1500);
+  });
+
+  it("uses the user's purchase price and keeps the original purchase date (own-wallet transfers don't reset it)", () => {
+    const [d] = computeDisposals(valued(), { [key]: { costEur: 500, acquiredOn: "2024-05-01" } }).disposals;
+    expect(d).toMatchObject({ basisKnown: true, basisFromUser: true, taxFree: true, costEur: 500 });
+  });
+
+  it("with a recent purchase date the sale stays taxable, now with the real cost", () => {
+    const report = buildSoReport(valued(), 2026, [], { [key]: { costEur: 1200, acquiredOn: "2025-12-01" } });
+    expect(report.gainEur).toBeCloseTo(300);
+    expect(report.disposals[0].basisFromUser).toBe(true);
+  });
+
+  it("lists non-stable transfers and marks the ones this year's taxable sales used", () => {
+    const report = buildSoReport(valued(), 2026);
+    expect(report.transfersIn).toEqual([expect.objectContaining({ key, token: "SOL", amount: 10, usedInTaxYear: 1 })]);
+  });
+});
+
 describe("buildSoReport", () => {
   it("sums taxable disposals of the year and applies the Freigrenze note", () => {
     const report = buildSoReport(
-      [
+      valueMovements([
         mv("2026-01-01T00:00:00Z", { [USDC]: 1000 }, "in"),
         mv("2026-01-02T00:00:00Z", { [USDC]: -1000, [SOL_MINT]: 5 }, "swap"), // 800 €
         mv("2026-05-01T00:00:00Z", { [SOL_MINT]: -5, [USDC]: 1100 }, "swap", 0.01), // 880 € proceeds (USDC side), fee 1.5 €
-      ],
-      prices,
+      ], prices),
       2026,
     );
     expect(report.proceedsEur).toBe(1680); // USDC→SOL (800) and SOL→USDC (880)

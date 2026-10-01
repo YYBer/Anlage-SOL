@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Progress } from "@/lib/core/progress";
 import type { ReportDto, ReportStreamLine } from "@/lib/dto";
 import { parseEur } from "@/lib/format";
+import { buildSoReport } from "@/lib/tax/germany-so";
 import { combineKap } from "@/lib/tax/kap";
 import { FundingCard, KapCard, SoCard } from "./_components/FormCards";
 import { button, card, input } from "./_components/format";
@@ -11,6 +12,7 @@ import { loadOthers, OtherPlatforms, saveOthers, type OtherRow } from "./_compon
 import { ProgressPanel } from "./_components/ProgressBar";
 import { HedgedMarkets, PositionsTable } from "./_components/Positions";
 import { SpotDisposals } from "./_components/Spot";
+import { loadOverrides, saveOverrides, toOverrides, TransfersIn, type OverrideInput } from "./_components/TransfersIn";
 import { findHedgedMarkets } from "./_components/Positions";
 import { berlinYear } from "@/lib/core/time";
 
@@ -79,6 +81,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportDto | null>(null);
   const [others, setOthers] = useState<OtherRow[]>([]);
+  const [overrideValues, setOverrideValues] = useState<Record<string, OverrideInput>>({});
   const [steps, setSteps] = useState<Progress[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -87,6 +90,19 @@ export default function Home() {
     setOthers(rows);
     if (report) saveOthers(report.wallet, report.taxYear, rows);
   }
+
+  function updateOverrides(values: Record<string, OverrideInput>) {
+    setOverrideValues(values);
+    if (report) saveOverrides(report.wallet, values);
+  }
+
+  // Anlage SO with the user's purchase prices for transferred tokens, recomputed in the browser.
+  const so = useMemo(() => {
+    const base = report?.so;
+    if (!base) return base;
+    const overrides = toOverrides(overrideValues);
+    return Object.keys(overrides).length ? buildSoReport(base.movements, base.taxYear, base.fetchWarnings, overrides) : base;
+  }, [report, overrideValues]);
 
   const otherSources = others.map((o) => ({ label: o.label, gainsEur: parseEur(o.gains), lossesEur: parseEur(o.losses) }));
   const totals = report ? combineKap(report.kap, otherSources) : null;
@@ -107,6 +123,7 @@ export default function Home() {
       setStale(false);
       // Other-platform amounts belong to a wallet and tax year; restore what was entered last time.
       setOthers(loadOthers(r.wallet, r.taxYear));
+      setOverrideValues(loadOverrides(r.wallet));
     };
     try {
       // Everything is read: all perp venues and spot. Nothing to choose, so nothing can be forgotten.
@@ -136,14 +153,14 @@ export default function Home() {
     if (!report || !totals) return;
     // jsPDF is only needed here, so it stays out of the initial bundle.
     const { buildReceipt } = await import("@/lib/export/pdf");
-    buildReceipt({ report, totals, others: otherSources, so: report.so }).save(`${prefix}-nachweis.pdf`);
+    buildReceipt({ report, totals, others: otherSources, so }).save(`${prefix}-nachweis.pdf`);
   }
 
   // What the wallet actually did decides what the page shows.
   const fillsBy = (protocol: string) => report?.fills.filter((f) => f.protocol === protocol).length ?? 0;
   const hasPerps = !!report && (report.positions.length > 0 || report.fundingPayments > 0);
   const hedged = report ? findHedgedMarkets(report) : [];
-  const venues = report?.so ? [...new Set(report.so.disposals.map((d) => d.venue.replace(" (via bot)", "")))] : [];
+  const venues = so ? [...new Set(so.disposals.map((d) => d.venue.replace(" (via bot)", "")))] : [];
 
   return (
     <main className={`mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 ${loading ? "pb-48" : ""}`}>
@@ -235,7 +252,7 @@ export default function Home() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <KapCard report={report} totals={totals} othersIncluded={othersIncluded} />
-              <SoCard taxYear={report.taxYear} so={report.so} pending={report.soPending} error={report.soError} />
+              <SoCard taxYear={report.taxYear} so={so} pending={report.soPending} error={report.soError} />
             </div>
             <OtherPlatforms rows={others} onChange={updateOthers} />
           </section>
@@ -259,10 +276,11 @@ export default function Home() {
             </section>
           )}
 
-          {report.so && report.so.disposals.length > 0 && (
+          {so && (so.disposals.length > 0 || so.transfersIn.length > 0) && (
             <section className="grid gap-4">
               <h2 className="text-lg font-semibold">Spot disposals</h2>
-              <SpotDisposals so={report.so} />
+              {so.transfersIn.length > 0 && <TransfersIn transfers={so.transfersIn} taxYear={so.taxYear} values={overrideValues} onChange={updateOverrides} />}
+              <SpotDisposals so={so} />
             </section>
           )}
 

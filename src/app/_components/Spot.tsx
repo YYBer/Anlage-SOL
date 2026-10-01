@@ -40,6 +40,7 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
                   {d.acquiredAt ? day(d.acquiredAt) : "unknown"}
                   {d.taxFree && <span className="ml-1 text-xs text-good">&gt; 1 yr</span>}
                   {!d.basisKnown && <span className="ml-1 text-xs text-warn">cost unknown</span>}
+                  {d.basisFromUser && <span className="ml-1 text-xs text-muted">your records</span>}
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">{eur(d.proceedsEur)}</td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">{eur(d.costEur)}</td>
@@ -66,7 +67,7 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
         </table>
       </div>
       {unknown > 0 && (
-        <p className="text-xs text-muted">{unknown} disposals use tokens that arrived by transfer; add their purchase price from your exchange records.</p>
+        <p className="text-xs text-muted">{unknown} disposals use tokens that arrived by transfer without a purchase price; fill them in above.</p>
       )}
     </div>
   );

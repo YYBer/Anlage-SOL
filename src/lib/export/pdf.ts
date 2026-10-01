@@ -281,7 +281,12 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
   if (so && so.disposals.length) {
     doc.addPage();
     heading(doc, `Anlage D – Veräußerungen von Kryptowerten ${year} (FIFO, ${so.disposals.length})`, 20);
-    paragraph(doc, "* Anschaffungskosten unbekannt (Token per Übertragung erhalten) und mit 0 € angesetzt; bitte mit Kaufbelegen ergänzen.", 25, 8);
+    paragraph(
+      doc,
+      "* Anschaffungskosten unbekannt (Token per Übertragung erhalten) und mit 0 € angesetzt. A = Kaufdatum und Anschaffungskosten laut Angabe des Steuerpflichtigen (Belege der Börse).",
+      25,
+      8,
+    );
     autoTable(doc, {
       ...tableBase,
       startY: 29,
@@ -306,7 +311,7 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
         d.token,
         d.venue,
         num(d.amount, 6),
-        (d.acquiredAt ? berlinDate(d.acquiredAt) : "unbekannt") + (d.basisKnown ? "" : " *"),
+        (d.acquiredAt ? berlinDate(d.acquiredAt) : "unbekannt") + (d.basisKnown ? "" : " *") + (d.basisFromUser ? " A" : ""),
         `${d.holdingDays} T`,
         num(d.proceedsEur),
         num(d.costEur),

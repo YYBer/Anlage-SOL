@@ -5,7 +5,7 @@ import type { Adapter, Protocol, WalletHistory } from "./core/types";
 import { fetchSpotHistory, type SpotFetchOptions } from "./spot/history";
 import { loadPriceBook } from "./spot/prices";
 import { loadEcbFx, type FxTable } from "./tax/fx";
-import { buildSoReport } from "./tax/germany-so";
+import { buildSoReport, valueMovements } from "./tax/germany-so";
 import type { SoReportDto } from "./tax/so-dto";
 import { buildGermanyReport, type FundingMode, type GermanyReport } from "./tax/germany";
 import { taxYearEnd, taxYearStart } from "./core/time";
@@ -64,5 +64,6 @@ export async function germanySoReport(wallet: string, taxYear: number, opts: Spo
   opts.onProgress?.({ source: "prices", message: "Loading token prices" });
   const prices = await loadPriceBook(mints, first, yearEnd, fx, warnings);
   opts.onProgress?.({ source: "prices", message: "Token prices loaded", finished: true });
-  return buildSoReport(spot.movements, prices, taxYear, warnings);
+  // Overrides (the user's purchase prices for transfers) are applied in the browser on top of this.
+  return buildSoReport(valueMovements(spot.movements, prices), taxYear, warnings);
 }
