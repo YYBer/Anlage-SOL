@@ -9,7 +9,7 @@ Sample wallets to test with (found on mainnet, not ours):
 
 | Button | Wallet | What it shows |
 |---|---|---|
-| Phoenix perps | `wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw` | 155 Phoenix perp fills and 725 funding payments → Anlage KAP |
+| Phoenix perps | `HwqTFnTKL2JybxCPL6BCyFpoLtThZKHymFcyj3SAPKK2` | 311 Phoenix perp fills and 107 funding payments → Anlage KAP |
 | Spot swaps | `4vy8sofeZxjkoFxSXCN4f2jw5sVeRLWXxRBMpmn1Vqwd` | a small spot trader, ~50 transactions → Anlage SO |
 | Jupiter Perps | `YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7` | very active; minutes on a public RPC |
 | Pacifica | `DxPKAPbkiTVdxx9wLvxPJf2Qgqa5Su24rBXYxgF4xhJb` | 181 fills and 2.002 funding payments in 2026, 44 closed positions; about 2 minutes, because Pacifica's API serves 50 rows per request |

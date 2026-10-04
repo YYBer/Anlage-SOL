@@ -18,7 +18,7 @@ import { berlinYear } from "@/lib/core/time";
 
 // Found on mainnet, one per venue, so every example is one click away. `slow` warns before the wait.
 const SAMPLES = [
-  { label: "Phoenix perps", wallet: "wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw", hint: "155 perp fills and 725 funding payments" },
+  { label: "Phoenix perps", wallet: "HwqTFnTKL2JybxCPL6BCyFpoLtThZKHymFcyj3SAPKK2", hint: "311 perp fills and 107 funding payments" },
   { label: "Spot swaps", wallet: "4vy8sofeZxjkoFxSXCN4f2jw5sVeRLWXxRBMpmn1Vqwd", hint: "a small spot trader, ~50 transactions" },
   { label: "Jupiter Perps", wallet: "YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7", hint: "very active; minutes on a public RPC", slow: true },
   { label: "Pacifica", wallet: "DxPKAPbkiTVdxx9wLvxPJf2Qgqa5Su24rBXYxgF4xhJb", hint: "181 fills and 2.002 funding payments; about 2 minutes", slow: true },
