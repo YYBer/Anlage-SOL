@@ -1,12 +1,61 @@
-# Perpelster
+# Perpelster — your perp trades, ready for ELSTER
 
 > **Deine Perp-Trades. Fertig für ELSTER.**
-> Jupiter- und Phoenix-Trades als deutsche Steuerberichte — ohne Excel, ohne manuelles Taggen.
+> German tax reports for Solana traders: paste a wallet, get the exact lines to type into the tax form — no spreadsheets, no manual tagging.
 
-Tax reports for Solana perp traders, starting with Germany: enter a wallet, pick a tax year, get
-Anlage KAP line items for ELSTER, a ledger in which every fill links to its on-chain transaction, and a Koinly CSV.
+**Live MVP:** https://perpelster.vercel.app — no wallet connection, no signup. Paste any Solana address (or press a sample button) and press *Generate report*.
 
-## Run
+Sample wallets to test with (found on mainnet, not ours):
+
+| Button | Wallet | What it shows |
+|---|---|---|
+| Sample: perp trader | `wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw` | 155 Phoenix perp fills, 725 funding payments → Anlage KAP |
+| Sample: memecoin trader | `3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D` | 173 transactions: pump.fun / PumpSwap through a trading bot, Jupiter, DFlow → Anlage SO |
+| (paste manually) | `YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7` | Jupiter Perps, very active |
+
+The hosted demo runs on a public Solana RPC (~1 request/s), so the first query on a busy wallet takes minutes. A wallet queried before answers in about a second.
+
+## Problem
+
+Germany taxes a Solana trader's two kinds of activity under two different laws, on two different forms, and they cannot offset each other:
+
+- **Perps** are Termingeschäfte under § 20 Abs. 2 EStG → **Anlage KAP**. Every closing fill is a taxable event in the year it happens, in EUR at that day's rate.
+- **Spot swaps** are private disposals under § 23 EStG → **Anlage SO**. FIFO per token, tax-free after one year, 1.000 € Freigrenze.
+
+No broker sends a Steuerbescheinigung for any of this. The trader has to reconstruct it: find every fill across venues, convert each to EUR at the right daily rate, apply FIFO across years, split the result over two forms, and keep proof the tax office accepts. Commercial crypto tax tools import CEX CSVs and stumble over on-chain perps — Jupiter Perps has no history API at all, and funding payments are invisible in a plain transaction list.
+
+**Perpelster does that from a wallet address alone**, and every number it prints links back to the transaction it came from.
+
+## Product
+
+Enter a wallet and a tax year. The report that comes back has:
+
+- **Anlage KAP line items** — line 19 (net result) and line 22 (contained losses), as numbers to type into ELSTER.
+- **Anlage SO line items** — lines 45–51 and 58 for crypto disposals, with FIFO holding periods and the 1.000 € Freigrenze applied.
+- **A ledger** of every fill, funding payment and disposal, each linking to its transaction on Solscan, so an auditor can follow any euro back to the chain.
+- **A PDF receipt** (Nachweis) with the method described in German, and **CSV exports** (positions, audit ledger, Koinly).
+- **Fields for what the chain cannot know**: the purchase price of tokens that arrived by transfer, and gains/losses from other platforms (Hyperliquid, CEX) that join the same KAP lines.
+
+Two decisions the tool does not make for the user: how funding fees should count (no official German guidance exists yet, so it is a choice with both options explained), and anything requiring a tax advisor's signature. It produces numbers and evidence, not advice.
+
+The whole input is a wallet address, a tax year and that one funding choice. Venue checkboxes were removed on purpose: a venue the user forgets to tick would silently understate the report.
+
+## Solana integration
+
+The product *is* the Solana integration — the chain is the only data source. No Steuerbescheinigung, no exchange CSV, no user-entered trade list.
+
+**Reading perps (Anlage KAP):**
+
+- **Jupiter Perps** (`PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu`) has no history API. Opens and liquidations do not list the owner wallet in their accounts, so the adapter derives the wallet's 9 **Position PDAs** (3 markets × long + 2 stablecoin-collateral shorts) with `findProgramAddressSync`, pages `getSignaturesForAddress` over each, and decodes the program's **Anchor `emit_cpi!` events** out of the inner instructions with `BorshEventCoder` and the program IDL. That yields size, price, PnL, position fee and funding fee per execution.
+- **Phoenix Perps** via its public API (`perp-api.phoenix.trade`) for trades, funding and collateral, with the on-chain signature kept on every row so the receipt stays verifiable.
+
+**Reading spot (Anlage SO), DEX-agnostic:** for every transaction of the wallet, the adapter nets `preTokenBalances` against `postTokenBalances` (plus the SOL delta, minus rent dust and the network fee). Tokens out + tokens in = a swap, which is a disposal plus an acquisition under § 23 EStG. This works identically for Jupiter, pump.fun, PumpSwap, Raydium, Orca, Meteora, DFlow or an unknown trading bot, because it reads the *effect* of the transaction instead of parsing each program's instructions. Program IDs are matched afterwards (`spot/venues.ts`) only to name the venue on screen. Perp-program transactions are excluded, since they belong to KAP.
+
+**Stack:** `@solana/web3.js` (RPC: `getSignaturesForAddress`, `getTransaction` with parsed token balances), `@coral-xyz/anchor` (PDA derivation, event decoding, IDL), Next.js 16 API route streaming NDJSON progress to the page.
+
+**Network:** mainnet, read-only. Devnet has no perp history and no priceable tokens, so a tax report there would be empty — `SOLANA_RPC_URL` can point anywhere, but the demo uses mainnet because that is where the data a German tax return needs actually lives. Nothing is signed, no key is ever requested, and the app holds no custody: it only reads public history.
+
+## Run locally
 
 ```bash
 npm install
@@ -24,16 +73,8 @@ Copy `.env.example` to `.env.local`. Speed depends on the RPC (measured 2026-09-
 | Helius free tier (~10 req/s) | ~20 s (estimated) | ~1 s |
 
 The API streams progress (`application/x-ndjson`), and the page shows it in a status bar at the bottom of the screen.
-
-The page asks only for the wallet, the tax year and how to treat funding. It always reads everything (Phoenix,
-Jupiter Perps and spot on any DEX), because a venue the user forgets to tick would silently understate the report.
 Perps come back first as a partial result; spot follows and skips transactions already known as perp fills
 (measured on the perp sample wallet: 145 of 191 transactions skipped, full report in 12 s with a warm cache).
-
-Sample wallets (found on mainnet, not ours):
-- Phoenix: `wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw`
-- Spot: `3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D`, a memecoin trader: 105 of 173 transactions go through a trading-bot router into pump.fun / PumpSwap, 36 through Jupiter, a few via DFlow; no perps
-- Jupiter: `YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7` (very active; use `--max-sigs`)
 
 ## Layout
 
@@ -43,9 +84,13 @@ src/lib/
   core/positions.ts      fills → positions (open until size returns to 0)
   adapters/phoenix.ts    Phoenix perp API (trades, funding, collateral)
   adapters/jupiter/      Jupiter Perps: Position PDAs → signatures → Anchor CPI events
+  spot/history.ts        any transaction → net token deltas → swap / transfer
+  spot/prices.ts         CoinGecko daily EUR, stablecoins via ECB
   tax/fx.ts              ECB USD/EUR reference rates
   tax/germany.ts         § 20 EStG realization per closing fill → Anlage KAP lines
+  tax/germany-so.ts      § 23 EStG FIFO per token → Anlage SO lines
   export/csv.ts          positions, audit ledger, Koinly
+  export/pdf.ts          German receipt (Nachweis) with method and per-row signatures
   report.ts              fetch + FX + report
 src/app/                 Next.js UI and POST /api/report
 scripts/report.ts        CLI
@@ -78,7 +123,15 @@ scripts/report.ts        CLI
 - Reads every transaction of the wallet and nets the wallet's token balance changes; tokens out + tokens in = a swap (disposal + acquisition). It works the same whether the user traded on Jupiter, pump.fun or through a trading bot, because it doesn't depend on the DEX. The venue (`spot/venues.ts`) is shown for information only. Perp program transactions are excluded (they are KAP).
 - FIFO per token over the full history; > 1 year holding is tax-free; 1.000 € Freigrenze noted.
 - Prices: stablecoins via ECB; others via CoinGecko daily EUR (public API: last 365 days, set `COINGECKO_API_KEY` for more); unpriced tokens valued by the other side of the swap.
-- Incoming transfers of non-stablecoins have unknown cost and are set to 0 € (flagged). Anlage SO lines 45–51/58 checked against the official 2025 form (2026-09); the 2026 form is not out yet.
+- Tokens that arrived by transfer have no on-chain purchase price. They start at 0 € and are flagged; the user can enter what they paid, and the Anlage SO result is recomputed in the browser (kept per wallet).
+- Anlage SO lines 45–51/58 checked against the official 2025 form (2026-09); the 2026 form is not out yet.
+
+## Limits
+
+- Mainnet only in practice (see *Network* above), and the hosted demo's public RPC makes the first query on a busy wallet slow.
+- Prices for tokens older than 365 days need a CoinGecko key.
+- Line numbers are checked against the official 2025 forms; the 2026 forms are not published yet, and the report says so for years it could not verify.
+- It is a reporting tool, not tax advice. Every figure is traceable precisely so a tax advisor can check it.
 
 ## Roadmap
 
@@ -94,6 +147,5 @@ scripts/report.ts        CLI
   of same-platform legs in the hedge view.
 - Jupiter longs collateralized in SOL/ETH/BTC: the internal swap of collateral is not an Anlage SO disposal yet.
 - Staking/airdrop income (§ 22 Nr. 3).
-- Let users enter the purchase price of tokens that arrived by transfer (now 0 €).
 - CoinTracking / Blockpit CSV.
-- Jupiter: parallel fetching for paid RPC; streaming progress to the UI.
+- Jupiter: parallel fetching for paid RPC.
