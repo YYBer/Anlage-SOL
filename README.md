@@ -12,6 +12,7 @@ Sample wallets to test with (found on mainnet, not ours):
 | Sample: perp trader | `wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw` | 155 Phoenix perp fills, 725 funding payments → Anlage KAP |
 | Sample: memecoin trader | `3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D` | 173 transactions: pump.fun / PumpSwap through a trading bot, Jupiter, DFlow → Anlage SO |
 | (paste manually) | `YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7` | Jupiter Perps, very active |
+| (paste manually) | `BtGmu8gixQcNzADq4JHy9qpHUfwXDNoAo6CvUwTMNA3D` | Pacifica: 12,235 fills and 12,191 funding payments in 2026, mostly ETH. Reading it takes about 15 minutes, because Pacifica's API serves 50 rows per request |
 
 The hosted demo runs on a public Solana RPC (~1 request/s), so the first query on a busy wallet takes minutes. A wallet queried before answers in about a second.
 
@@ -131,7 +132,8 @@ scripts/report.ts        CLI
 - Reads every transaction of the wallet and nets the wallet's token balance changes; tokens out + tokens in = a swap (disposal + acquisition). It works the same whether the user traded on Jupiter, pump.fun or through a trading bot, because it doesn't depend on the DEX. The venue (`spot/venues.ts`) is shown for information only. Perp program transactions are excluded (they are KAP).
 - FIFO per token over the full history; > 1 year holding is tax-free; 1.000 € Freigrenze noted.
 - Prices: stablecoins via ECB; others via CoinGecko daily EUR (public API: last 365 days, set `COINGECKO_API_KEY` for more); unpriced tokens valued by the other side of the swap.
-- Tokens that arrived by transfer have no on-chain purchase price. They start at 0 € and are flagged; the user can enter what they paid, and the Anlage SO result is recomputed in the browser (kept per wallet).
+- Tokens that arrive without a payment from the wallet have no on-chain purchase price. Cost basis is taken in this order: the user's own entry, else the market value on arrival if the wallet signed and paid for the transaction (a likely purchase funded from elsewhere), else 0 €. Each disposal shows which applied ("your entry" / "estimated" / "cost unknown"), marked A / S / * in the receipt.
+- The user can enter the real purchase price and date per arrival; the browser reruns FIFO on the server's valued movements, so nothing is fetched again (kept per wallet in the browser). The date matters: moving tokens between your own wallets does not restart the one-year holding period.
 - Anlage SO lines 45–51/58 checked against the official 2025 form (2026-09); the 2026 form is not out yet.
 
 ## Limits
@@ -139,6 +141,7 @@ scripts/report.ts        CLI
 - Mainnet only in practice (see *Network* above), and the hosted demo's public RPC makes the first query on a busy wallet slow.
 - Prices for tokens older than 365 days need a CoinGecko key.
 - Line numbers are checked against the official 2025 forms; the 2026 forms are not published yet, and the report says so for years it could not verify.
+- Funds the wallet holds elsewhere are only half visible: when a trade settles from a trading bot's own account, a second wallet or an exchange, tokens arrive with no payment and returning SOL looks like a transfer. The cost estimate and the manual entry cover this; following those accounts would need per-bot work.
 - It is a reporting tool, not tax advice. Every figure is traceable precisely so a tax advisor can check it.
 
 ## Roadmap
