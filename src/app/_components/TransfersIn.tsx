@@ -54,25 +54,27 @@ export function TransfersIn({
 }) {
   const [showAll, setShowAll] = useState(false);
   const relevant = transfers.filter((t) => t.usedInTaxYear > 0 || values[t.key]?.cost);
+  const unpriced = relevant.filter((t) => t.appliedSource === "none").length;
   const rows = [...(showAll ? transfers : relevant)].sort((a, b) => b.usedInTaxYear - a.usedInTaxYear || a.time.localeCompare(b.time));
-  const open = relevant.filter((t) => !values[t.key]?.cost.trim()).length;
+  const open = relevant.filter((t) => t.appliedSource !== "user").length;
   const set = (key: string, patch: Partial<OverrideInput>) => onChange({ ...values, [key]: { ...(values[key] ?? { cost: "", date: "" }), ...patch } });
 
   return (
     <section className={`${card} ${open ? "border-warn/60" : ""}`}>
       <h3 className="text-sm font-medium">Tokens you transferred in</h3>
       <p className="mt-1 text-xs text-muted">
-        These tokens came from another wallet or an exchange, so their purchase isn&apos;t on this wallet&apos;s chain history. Until you fill them in they
-        count as bought for 0 € on arrival, which overstates gains. Enter the date you originally bought them and what you paid in total: moving tokens between
-        your own wallets doesn&apos;t restart the one-year holding period.
+        These tokens arrived without a payment from this wallet: sent from another wallet or an exchange, or bought with funds held elsewhere — a trading bot
+        that pays from its own account looks the same from here. Where the wallet itself paid the transaction fee we estimate the cost from the market value on
+        arrival; otherwise it counts as 0 €, which overstates gains. Your own numbers are better than both: enter what you paid in total and when you originally
+        bought, since moving tokens between your own wallets doesn&apos;t restart the one-year holding period.
       </p>
       <p className="mt-2 text-xs">
         {relevant.length ? (
           <>
-            <span className={open ? "text-warn" : "text-good"}>
+            <span className={unpriced ? "text-warn" : open ? "text-muted" : "text-good"}>
               {open
-                ? `${open} of ${relevant.length} transfers used by ${taxYear} sales still need a price.`
-                : `All transfers used by ${taxYear} sales are filled in.`}
+                ? `${open} of ${relevant.length} arrivals used by ${taxYear} sales have no price from you${unpriced ? `, ${unpriced} of them counted as 0 €` : " (estimated from market value)"}.`
+                : `All arrivals used by ${taxYear} sales are filled in.`}
             </span>{" "}
           </>
         ) : (
@@ -93,7 +95,7 @@ export function TransfersIn({
                 <th className="py-2 pr-3 font-medium">Arrived</th>
                 <th className="py-2 pr-3 font-medium">Token</th>
                 <th className="py-2 pr-3 text-right font-medium">Amount</th>
-                <th className="py-2 pr-3 text-right font-medium">Value on arrival</th>
+                <th className="py-2 pr-3 text-right font-medium">Cost in use</th>
                 <th className="py-2 pr-3 font-medium">Originally bought on</th>
                 <th className="py-2 pr-3 font-medium">Total cost €</th>
               </tr>
@@ -109,7 +111,12 @@ export function TransfersIn({
                   </td>
                   <td className="py-2 pr-3 font-medium">{t.token}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{amount(t.amount)}</td>
-                  <td className="py-2 pr-3 text-right font-mono text-muted tabular-nums">{t.marketValueEur === null ? "—" : eur(t.marketValueEur)}</td>
+                  <td className="py-2 pr-3 text-right font-mono tabular-nums">
+                    <span className={t.appliedSource === "none" ? "text-warn" : "text-muted"}>{eur(t.appliedCostEur)}</span>
+                    <span className="block text-[11px] text-muted">
+                      {t.appliedSource === "user" ? "your entry" : t.appliedSource === "estimate" ? "estimated" : "no price known"}
+                    </span>
+                  </td>
                   <td className="py-2 pr-3">
                     <input
                       type="date"

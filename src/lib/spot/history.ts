@@ -28,6 +28,12 @@ export interface Movement {
   kind: "swap" | "in" | "out";
   /** Where the swap happened, e.g. "Jupiter" or "pump.fun (via bot)". Display only. */
   venue: string;
+  /**
+   * The wallet itself paid for and signed this transaction. Tokens arriving in a transaction the wallet
+   * signed are almost always a purchase it paid for from somewhere we can't see (a trading bot's own
+   * account, a second wallet), not an incoming transfer from someone else.
+   */
+  signedByWallet: boolean;
 }
 
 export interface SpotHistory {
@@ -78,7 +84,7 @@ export function movementFromTx(wallet: string, signature: string, tx: VersionedT
   const kind = values.some((d) => d < 0) && values.some((d) => d > 0) ? "swap" : values.some((d) => d > 0) ? "in" : "out";
   const topLevel = tx.transaction.message.compiledInstructions.map((ix) => keys[ix.programIdIndex]);
   const inner = (meta.innerInstructions ?? []).flatMap((g) => g.instructions.map((ix) => keys[ix.programIdIndex]));
-  return { signature, time: new Date(tx.blockTime * 1000), deltas, feeSol, kind, venue: detectVenue(topLevel, inner) };
+  return { signature, time: new Date(tx.blockTime * 1000), deltas, feeSol, kind, venue: detectVenue(topLevel, inner), signedByWallet: idx === 0 };
 }
 
 export interface SpotFetchOptions {

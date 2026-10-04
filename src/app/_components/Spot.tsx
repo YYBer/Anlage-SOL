@@ -4,7 +4,7 @@ import { day, eur } from "./format";
 const amount = (x: number) => x.toLocaleString("de-DE", { maximumFractionDigits: x < 1 ? 6 : 2 });
 
 export function SpotDisposals({ so }: { so: SoReportDto }) {
-  const unknown = so.disposals.filter((d) => !d.basisKnown).length;
+  const unknown = so.disposals.filter((d) => !d.basisKnown && !d.basisEstimated).length;
   return (
     <div className="grid gap-3">
       {so.warnings.length > 0 && (
@@ -39,7 +39,8 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
                 <td className="px-3 py-2 tabular-nums">
                   {d.acquiredAt ? day(d.acquiredAt) : "unknown"}
                   {d.taxFree && <span className="ml-1 text-xs text-good">&gt; 1 yr</span>}
-                  {!d.basisKnown && <span className="ml-1 text-xs text-warn">cost unknown</span>}
+                  {!d.basisKnown && !d.basisEstimated && <span className="ml-1 text-xs text-warn">cost unknown</span>}
+                  {d.basisEstimated && <span className="ml-1 text-xs text-muted">cost estimated</span>}
                   {d.basisFromUser && <span className="ml-1 text-xs text-muted">your records</span>}
                 </td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">{eur(d.proceedsEur)}</td>
@@ -67,7 +68,7 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
         </table>
       </div>
       {unknown > 0 && (
-        <p className="text-xs text-muted">{unknown} disposals use tokens that arrived by transfer without a purchase price; fill them in above.</p>
+        <p className="text-xs text-muted">{unknown} disposals use tokens that arrived without any known price (counted as 0 €); fill them in above.</p>
       )}
     </div>
   );

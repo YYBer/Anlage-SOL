@@ -19,6 +19,8 @@ export interface SoDisposalDto {
   basisKnown: boolean;
   /** Some of the cost basis or acquisition date comes from the user's own records. */
   basisFromUser: boolean;
+  /** Some of the cost basis is the market value when the tokens arrived, not a known purchase price. */
+  basisEstimated: boolean;
   signature: string | null;
 }
 
@@ -37,6 +39,7 @@ export interface ValuedMovementDto {
   venue: string;
   feeSol: number;
   feeEur: number;
+  signedByWallet: boolean;
   legs: ValuedLegDto[];
 }
 
@@ -49,8 +52,13 @@ export interface TransferInDto {
   mint: string;
   token: string;
   amount: number;
-  /** Market value on arrival, for orientation only (it is not the purchase price). */
+  /** Market value on arrival; used as an estimate when the wallet paid for the transaction itself. */
   marketValueEur: number | null;
+  /** The wallet signed this transaction, so it is most likely a purchase it paid for elsewhere. */
+  signedByWallet: boolean;
+  /** Cost currently in use: the user's entry, the estimate, or 0 €. */
+  appliedCostEur: number;
+  appliedSource: "user" | "estimate" | "none";
   /** Taxable disposals of the tax year that used these tokens: the transfers worth filling in first. */
   usedInTaxYear: number;
 }

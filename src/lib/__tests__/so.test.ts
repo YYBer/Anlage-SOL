@@ -18,13 +18,14 @@ const prices: PriceBook = {
 };
 
 let n = 0;
-const mv = (time: string, deltas: Record<string, number>, kind: Movement["kind"], feeSol = 0): Movement => ({
+const mv = (time: string, deltas: Record<string, number>, kind: Movement["kind"], feeSol = 0, signedByWallet = false): Movement => ({
   signature: `sig${n++}`,
   time: new Date(time),
   deltas: new Map(Object.entries(deltas)),
   feeSol,
   kind,
   venue: "Jupiter",
+  signedByWallet,
 });
 
 describe("heldOverOneYear", () => {
@@ -127,6 +128,31 @@ describe("cost overrides for transfers", () => {
   it("lists non-stable transfers and marks the ones this year's taxable sales used", () => {
     const report = buildSoReport(valued(), 2026);
     expect(report.transfersIn).toEqual([expect.objectContaining({ key, token: "SOL", amount: 10, usedInTaxYear: 1 })]);
+  });
+});
+
+describe("tokens arriving in a transaction the wallet paid for", () => {
+  // A trading bot buys from its own account: tokens arrive, the wallet only pays the network fee.
+  const botBuy = mv("2026-03-01T00:00:00Z", { [SOL_MINT]: 2 }, "in", 0, true);
+  const sale = mv("2026-04-01T00:00:00Z", { [SOL_MINT]: -2, [USDC]: 400 }, "swap");
+
+  it("estimates the cost from the market value on arrival instead of 0 €", () => {
+    const [d] = computeDisposals(valueMovements([botBuy, sale], prices)).disposals;
+    expect(d).toMatchObject({ basisEstimated: true, basisKnown: false });
+    expect(d.costEur).toBeCloseTo(300); // 2 SOL at 150 €
+    expect(d.gainEur).toBeCloseTo(20);
+  });
+
+  it("still uses 0 € when someone else sent the tokens", () => {
+    const gift = mv("2026-03-01T00:00:00Z", { [SOL_MINT]: 2 }, "in");
+    const [d] = computeDisposals(valueMovements([gift, sale], prices)).disposals;
+    expect(d).toMatchObject({ basisEstimated: false, costEur: 0 });
+  });
+
+  it("the user's own entry wins over the estimate", () => {
+    const key = transferKey(botBuy.signature, SOL_MINT);
+    const [d] = computeDisposals(valueMovements([botBuy, sale], prices), { [key]: { costEur: 250 } }).disposals;
+    expect(d).toMatchObject({ basisFromUser: true, basisEstimated: false, costEur: 250 });
   });
 });
 

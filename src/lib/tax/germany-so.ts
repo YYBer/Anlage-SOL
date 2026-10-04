@@ -26,6 +26,7 @@ interface Lot {
   /** False when the tokens arrived by transfer and their real purchase price is unknown. */
   basisKnown: boolean;
   fromUser: boolean;
+  estimated: boolean;
   /** Transfer key when the lot came from a transfer-in. */
   origin?: string;
 }
@@ -36,6 +37,7 @@ interface Chunk {
   acquiredAt: Date | null;
   basisKnown: boolean;
   fromUser: boolean;
+  estimated: boolean;
   origin?: string;
 }
 
@@ -77,13 +79,21 @@ class Fifo {
       const lot = list[0];
       const used = Math.min(lot.amount, left);
       const cost = lot.costEur * (used / lot.amount);
-      out.push({ amount: used, costEur: cost, acquiredAt: lot.acquiredAt, basisKnown: lot.basisKnown, fromUser: lot.fromUser, origin: lot.origin });
+      out.push({
+        amount: used,
+        costEur: cost,
+        acquiredAt: lot.acquiredAt,
+        basisKnown: lot.basisKnown,
+        fromUser: lot.fromUser,
+        estimated: lot.estimated,
+        origin: lot.origin,
+      });
       lot.amount -= used;
       lot.costEur -= cost;
       left -= used;
       if (lot.amount <= EPS) list.shift();
     }
-    if (left > EPS) out.push({ amount: left, costEur: 0, acquiredAt: null, basisKnown: false, fromUser: false });
+    if (left > EPS) out.push({ amount: left, costEur: 0, acquiredAt: null, basisKnown: false, fromUser: false, estimated: false });
     return out;
   }
 }
@@ -97,6 +107,7 @@ export function valueMovements(movements: Movement[], prices: PriceBook): Valued
     venue: m.venue,
     feeSol: m.feeSol,
     feeEur: m.feeSol > 0 ? (prices.valueEur(SOL_MINT, m.feeSol, m.time) ?? 0) : 0,
+    signedByWallet: m.signedByWallet,
     legs: [...m.deltas].map(([mint, amount]) => ({ mint, amount, valueEur: prices.valueEur(mint, Math.abs(amount), m.time) })),
   }));
 }
@@ -117,6 +128,7 @@ export function computeDisposals(movements: ValuedMovementDto[], overrides: Reco
   let unpricedSwaps = 0;
   let transfersInOpen = 0;
   let transfersInFilled = 0;
+  let transfersInEstimated = 0;
   let transfersOut = 0;
 
   for (const m of movements) {
@@ -139,13 +151,18 @@ export function computeDisposals(movements: ValuedMovementDto[], overrides: Reco
           transfersInFilled++;
           // Noon UTC keeps the entered calendar date in Europe/Berlin.
           const acquiredAt = o.acquiredOn ? new Date(`${o.acquiredOn}T12:00:00Z`) : time;
-          fifo.add(i.mint, { amount: i.amount, costEur: o.costEur, acquiredAt, basisKnown: true, fromUser: true, origin: key });
+          fifo.add(i.mint, { amount: i.amount, costEur: o.costEur, acquiredAt, basisKnown: true, fromUser: true, estimated: false, origin: key });
         } else if (isStable(i.mint)) {
           // Stablecoins arriving from elsewhere were almost certainly bought at ~1 USD.
-          fifo.add(i.mint, { amount: i.amount, costEur: i.valueEur ?? 0, acquiredAt: time, basisKnown: true, fromUser: false, origin: key });
+          fifo.add(i.mint, { amount: i.amount, costEur: i.valueEur ?? 0, acquiredAt: time, basisKnown: true, fromUser: false, estimated: false, origin: key });
+        } else if (m.signedByWallet && i.valueEur !== null) {
+          // The wallet paid for this transaction, so the tokens were bought with funds held elsewhere
+          // (a trading bot's account, another wallet). The market value on arrival is close to that price.
+          transfersInEstimated++;
+          fifo.add(i.mint, { amount: i.amount, costEur: i.valueEur, acquiredAt: time, basisKnown: false, fromUser: false, estimated: true, origin: key });
         } else {
           transfersInOpen++;
-          fifo.add(i.mint, { amount: i.amount, costEur: 0, acquiredAt: time, basisKnown: false, fromUser: false, origin: key });
+          fifo.add(i.mint, { amount: i.amount, costEur: 0, acquiredAt: time, basisKnown: false, fromUser: false, estimated: false, origin: key });
         }
       }
       return;
@@ -196,6 +213,7 @@ export function computeDisposals(movements: ValuedMovementDto[], overrides: Reco
           taxFree,
           basisKnown: group.every((c) => c.basisKnown),
           basisFromUser: group.some((c) => c.fromUser),
+          basisEstimated: group.some((c) => c.estimated),
           signature: m.signature,
           origins: [...new Set(group.map((c) => c.origin).filter((x): x is string => !!x))],
         });
@@ -205,7 +223,9 @@ export function computeDisposals(movements: ValuedMovementDto[], overrides: Reco
     // Acquired tokens: cost = value of the exchange; without a price, the old cost basis carries over.
     const acquisitionValue = value ?? carriedCost;
     const inShares = inV ? inV.each.map((v) => (inV.total > 0 ? v / inV.total : 1 / ins.length)) : ins.map(() => 1 / ins.length);
-    ins.forEach((i, k) => fifo.add(i.mint, { amount: i.amount, costEur: acquisitionValue * inShares[k], acquiredAt: time, basisKnown: true, fromUser: false }));
+    ins.forEach((i, k) =>
+      fifo.add(i.mint, { amount: i.amount, costEur: acquisitionValue * inShares[k], acquiredAt: time, basisKnown: true, fromUser: false, estimated: false }),
+    );
   }
 
   if (unpricedSwaps) {
@@ -213,6 +233,11 @@ export function computeDisposals(movements: ValuedMovementDto[], overrides: Reco
   }
   if (transfersInOpen) {
     warnings.push(`${transfersInOpen} eingehende Übertragung(en) ohne Anschaffungskosten (mit 0 € angesetzt): Kaufpreis und -datum bitte ergänzen.`);
+  }
+  if (transfersInEstimated) {
+    warnings.push(
+      `${transfersInEstimated} Zugang/Zugänge aus selbst signierten Transaktionen (z. B. Kauf über einen Trading-Bot aus dessen eigenem Konto): Anschaffungskosten mit dem Marktwert bei Zugang geschätzt; bitte mit dem tatsächlichen Kaufpreis ergänzen.`,
+    );
   }
   if (transfersInFilled) warnings.push(`${transfersInFilled} eingehende Übertragung(en) mit Anschaffungskosten laut Angabe des Steuerpflichtigen.`);
   if (transfersOut) warnings.push(`${transfersOut} ausgehende Übertragung(en) als Wallet-Transfer behandelt (keine Veräußerung).`);
@@ -257,6 +282,14 @@ export function buildSoReport(
         .filter((l) => l.amount > 0 && !isStable(l.mint))
         .map((l) => {
           const key = transferKey(m.signature, l.mint);
+          const o = overrides[key];
+          // Same precedence as the FIFO above: the user's entry, else the estimate, else nothing.
+          const applied =
+            o && Number.isFinite(o.costEur)
+              ? { appliedCostEur: o.costEur, appliedSource: "user" as const }
+              : m.signedByWallet && l.valueEur !== null
+                ? { appliedCostEur: l.valueEur, appliedSource: "estimate" as const }
+                : { appliedCostEur: 0, appliedSource: "none" as const };
           return {
             key,
             signature: m.signature,
@@ -265,7 +298,9 @@ export function buildSoReport(
             token: tokenSymbol(l.mint),
             amount: l.amount,
             marketValueEur: l.valueEur,
+            signedByWallet: m.signedByWallet,
             usedInTaxYear: usage.get(key) ?? 0,
+            ...applied,
           };
         }),
     );
@@ -306,6 +341,7 @@ export function buildSoReport(
       taxFree: d.taxFree,
       basisKnown: d.basisKnown,
       basisFromUser: d.basisFromUser,
+      basisEstimated: d.basisEstimated,
       signature: d.signature,
     })),
     warnings: allWarnings,
