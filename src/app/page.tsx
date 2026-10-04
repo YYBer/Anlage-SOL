@@ -16,10 +16,12 @@ import { loadOverrides, saveOverrides, toOverrides, TransfersIn, type OverrideIn
 import { findHedgedMarkets } from "./_components/Positions";
 import { berlinYear } from "@/lib/core/time";
 
-// Found on mainnet: a Phoenix perp trader, and a small spot trader (Jupiter swaps, ~50 transactions).
+// Found on mainnet, one per venue, so every example is one click away. `slow` warns before the wait.
 const SAMPLES = [
-  ["Sample: perp trader", "wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw"],
-  ["Sample: spot trader", "4vy8sofeZxjkoFxSXCN4f2jw5sVeRLWXxRBMpmn1Vqwd"],
+  { label: "Phoenix perps", wallet: "wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw", hint: "155 perp fills and 725 funding payments" },
+  { label: "Spot swaps", wallet: "4vy8sofeZxjkoFxSXCN4f2jw5sVeRLWXxRBMpmn1Vqwd", hint: "a small spot trader, ~50 transactions" },
+  { label: "Jupiter Perps", wallet: "YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7", hint: "very active; minutes on a public RPC", slow: true },
+  { label: "Pacifica", wallet: "DxPKAPbkiTVdxx9wLvxPJf2Qgqa5Su24rBXYxgF4xhJb", hint: "181 fills and 2.002 funding payments; about 2 minutes", slow: true },
 ] as const;
 const THIS_YEAR = berlinYear(new Date());
 const YEARS = [THIS_YEAR, THIS_YEAR - 1, THIS_YEAR - 2];
@@ -189,10 +191,18 @@ export default function Home() {
               ))}
             </select>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {SAMPLES.map(([label, address]) => (
-              <button key={address} type="button" onClick={() => setWallet(address)} className={`${button} py-1 text-xs`}>
-                {label}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted">Try a sample:</span>
+            {SAMPLES.map((s) => (
+              <button
+                key={s.wallet}
+                type="button"
+                onClick={() => setWallet(s.wallet)}
+                title={`${s.wallet} — ${s.hint}`}
+                className={`${button} py-1 text-xs`}
+              >
+                {s.label}
+                {"slow" in s && s.slow ? <span className="text-muted"> · slow</span> : null}
               </button>
             ))}
           </div>

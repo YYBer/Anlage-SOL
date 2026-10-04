@@ -9,11 +9,10 @@ Sample wallets to test with (found on mainnet, not ours):
 
 | Button | Wallet | What it shows |
 |---|---|---|
-| Sample: perp trader | `wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw` | 155 Phoenix perp fills, 725 funding payments → Anlage KAP |
-| Sample: spot trader | `4vy8sofeZxjkoFxSXCN4f2jw5sVeRLWXxRBMpmn1Vqwd` | ~50 Jupiter swaps → Anlage SO. Small enough to finish in about two minutes on the public RPC |
-| (paste manually) | `3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D` | Memecoin trader: pump.fun / PumpSwap through a trading bot, Jupiter, DFlow. 250+ transactions and growing, so minutes on the public RPC |
-| (paste manually) | `YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7` | Jupiter Perps, very active |
-| (paste manually) | `BtGmu8gixQcNzADq4JHy9qpHUfwXDNoAo6CvUwTMNA3D` | Pacifica: 12,235 fills and 12,191 funding payments in 2026, mostly ETH. Reading it takes about 15 minutes, because Pacifica's API serves 50 rows per request |
+| Phoenix perps | `wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw` | 155 Phoenix perp fills and 725 funding payments → Anlage KAP |
+| Spot swaps | `4vy8sofeZxjkoFxSXCN4f2jw5sVeRLWXxRBMpmn1Vqwd` | a small spot trader, ~50 transactions → Anlage SO |
+| Jupiter Perps | `YzrEWGRqsgsQrENqjom3YaWA3xjZxDguAzYDfwWhLz7` | very active; minutes on a public RPC |
+| Pacifica | `DxPKAPbkiTVdxx9wLvxPJf2Qgqa5Su24rBXYxgF4xhJb` | 181 fills and 2.002 funding payments in 2026, 44 closed positions; about 2 minutes, because Pacifica's API serves 50 rows per request |
 
 The hosted demo runs on a public Solana RPC (~1 request/s), so the first query on a busy wallet takes minutes. A wallet queried before answers in about a second.
 
