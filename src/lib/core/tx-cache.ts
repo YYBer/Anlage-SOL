@@ -4,6 +4,9 @@ import type { Connection, VersionedTransactionResponse } from "@solana/web3.js";
 // in this server process: the second query for a wallet only fetches what is new.
 
 const MAX_ENTRIES = 100_000;
+
+/** Solana added transaction version 1; asking for 0 makes the RPC refuse those transactions outright. */
+const MAX_TX_VERSION = 1;
 const cache = new Map<string, VersionedTransactionResponse>();
 
 export function cachedTransaction(signature: string): VersionedTransactionResponse | undefined {
@@ -13,7 +16,7 @@ export function cachedTransaction(signature: string): VersionedTransactionRespon
 export async function getTransactionCached(conn: Connection, signature: string): Promise<VersionedTransactionResponse | null> {
   const hit = cache.get(signature);
   if (hit) return hit;
-  const tx = await conn.getTransaction(signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" });
+  const tx = await conn.getTransaction(signature, { maxSupportedTransactionVersion: MAX_TX_VERSION, commitment: "confirmed" });
   if (tx) {
     // Map keeps insertion order: drop the oldest entry when full.
     if (cache.size >= MAX_ENTRIES) cache.delete(cache.keys().next().value!);

@@ -38,8 +38,8 @@ export function createLimiter(opts: { concurrency: number; start: number; min: n
     },
     limited() {
       perSecond = Math.max(opts.min, perSecond / 2);
-      // Everyone waits a moment so the provider's window can reset.
-      nextSlot = Math.max(nextSlot, Date.now() + 2000);
+      // Everyone waits so the provider's window can reset; a single slow report beats missing data.
+      nextSlot = Math.max(nextSlot, Date.now() + 5000);
     },
     ok() {
       perSecond = Math.min(opts.max, perSecond + 0.05);
@@ -56,7 +56,7 @@ export function rpcLimiter(rpcUrl: string): Limiter {
   let l = byUrl.get(rpcUrl);
   if (!l) {
     l = isPublicRpc(rpcUrl)
-      ? createLimiter({ concurrency: 3, start: 0.9, min: 0.3, max: 1.4 })
+      ? createLimiter({ concurrency: 2, start: 0.8, min: 0.2, max: 1.2 })
       : createLimiter({ concurrency: 16, start: 10, min: 2, max: 50 });
     byUrl.set(rpcUrl, l);
   }
@@ -65,12 +65,16 @@ export function rpcLimiter(rpcUrl: string): Limiter {
 
 const isRateLimit = (e: unknown) => /429|too many requests/i.test(String((e as Error)?.message ?? e));
 
+/** How long a single call keeps retrying rate limits before giving up. */
+const RATE_LIMIT_BUDGET_MS = 10 * 60_000;
+
 /**
- * Runs an RPC call through the limiter. 429s slow the whole limiter down and retry without the long
- * exponential sleeps that stall a batch; other errors retry a few times with backoff.
+ * Runs an RPC call through the limiter. 429s slow the whole limiter down and keep retrying for as long
+ * as the budget allows — giving up early silently drops transactions from the report. Other errors
+ * retry a few times with backoff.
  */
 export async function limitedCall<T>(limiter: Limiter, fn: () => Promise<T>): Promise<T> {
-  let rateLimits = 0;
+  const deadline = Date.now() + RATE_LIMIT_BUDGET_MS;
   let failures = 0;
   for (;;) {
     try {
@@ -80,7 +84,7 @@ export async function limitedCall<T>(limiter: Limiter, fn: () => Promise<T>): Pr
     } catch (e) {
       if (isRateLimit(e)) {
         limiter.limited();
-        if (++rateLimits > 30) throw e;
+        if (Date.now() > deadline) throw e;
       } else {
         if (++failures >= 5) throw e;
         await sleep(1000 * 2 ** failures);
@@ -89,15 +93,30 @@ export async function limitedCall<T>(limiter: Limiter, fn: () => Promise<T>): Pr
   }
 }
 
-/** Maps with the limiter's pacing, reporting each completed item. Results keep input order. */
-export async function mapLimited<T, R>(items: T[], limiter: Limiter, fn: (item: T) => Promise<R>, onDone?: (done: number) => void): Promise<R[]> {
+/**
+ * Maps with the limiter's pacing, reporting each completed item. Results keep input order.
+ * With `onError`, a call that still fails after all retries yields null instead of failing the batch —
+ * the catch has to sit outside `limitedCall`, or rate limits would never be retried.
+ */
+export async function mapLimited<T, R>(
+  items: T[],
+  limiter: Limiter,
+  fn: (item: T) => Promise<R>,
+  onDone?: (done: number) => void,
+  onError?: (item: T, message: string) => void,
+): Promise<(R | null)[]> {
   let done = 0;
   return Promise.all(
-    items.map((item) =>
-      limitedCall(limiter, () => fn(item)).then((r) => {
-        onDone?.(++done);
-        return r;
-      }),
-    ),
+    items.map(async (item) => {
+      let result: R | null = null;
+      try {
+        result = await limitedCall(limiter, () => fn(item));
+      } catch (e) {
+        if (!onError) throw e;
+        onError(item, (e as Error).message);
+      }
+      onDone?.(++done);
+      return result;
+    }),
   );
 }

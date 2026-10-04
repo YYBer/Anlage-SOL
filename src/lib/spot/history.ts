@@ -124,6 +124,7 @@ export async function fetchSpotHistory(wallet: string, opts: SpotFetchOptions = 
     before = page.at(-1)!.signature;
   }
 
+  const failures: string[] = [];
   const skip = await (opts.skipSignatures ?? new Set<string>());
   const toRead = sigs.filter((s) => !skip.has(s));
   // Transactions read by an earlier report come from the cache; only new ones go to the RPC.
@@ -140,17 +141,26 @@ export async function fetchSpotHistory(wallet: string, opts: SpotFetchOptions = 
       if (done === total || done % Math.max(1, Math.floor(total / 40)) === 0)
         report({ source: "spot", message: label, done, total, etaSeconds: Math.round((total - done) / limiter.rate()) });
     },
+    (_signature, message) => failures.push(message),
   );
-  const txs = await Promise.all(toRead.map((s) => getTransactionCached(conn, s)));
+  // Everything that could be read is cached now; the rest stays null and is counted below.
+  const txs = toRead.map((s) => cachedTransaction(s) ?? null);
 
   const movements: Movement[] = [];
   let skippedPerp = sigs.length - toRead.length;
+  let unreadable = 0;
   txs.forEach((tx, i) => {
-    if (!tx) return;
+    if (!tx) {
+      unreadable++;
+      return;
+    }
     const m = movementFromTx(wallet, toRead[i], tx);
     if (m === "perp") skippedPerp++;
     else if (m) movements.push(m);
   });
+  if (unreadable) {
+    warnings.push(`Spot: ${unreadable} Transaktion(en) konnten nicht gelesen werden und fehlen in der Berechnung (z. B. "${failures[0] ?? "unbekannt"}").`);
+  }
   movements.sort((a, b) => a.time.getTime() - b.time.getTime());
   report({ source: "spot", message: `${movements.length} token movements`, done: total, total, finished: true });
   return { movements, skippedPerp, warnings };

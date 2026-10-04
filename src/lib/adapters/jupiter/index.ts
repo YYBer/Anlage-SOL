@@ -133,6 +133,7 @@ export function createJupiterAdapter(opts: JupiterOptions = {}): Adapter {
     async fetchHistory(wallet, fetchOpts = {}): Promise<WalletHistory> {
       const report = fetchOpts.onProgress ?? (() => {});
       const warnings: string[] = [];
+      const failures: string[] = [];
       const fills: Fill[] = [];
 
       // 1. Signatures of all 9 position slots, then 2. every transaction in one paced batch.
@@ -172,8 +173,15 @@ export function createJupiterAdapter(opts: JupiterOptions = {}): Adapter {
           if (done === total || done % Math.max(1, Math.floor(total / 40)) === 0)
             report({ source: "jupiter", message: label, done, total, etaSeconds: Math.round((total - done) / limiter.rate()) });
         },
+        (_work, message) => failures.push(message),
       );
-      const txs = await Promise.all(work.map((w) => getTransactionCached(conn, w.signature)));
+      const txs = work.map((w) => cachedTransaction(w.signature) ?? null);
+      const unreadable = txs.filter((tx) => !tx).length;
+      if (unreadable) {
+        warnings.push(
+          `Jupiter: ${unreadable} Transaktion(en) konnten nicht gelesen werden und fehlen in der Berechnung (z. B. "${failures[0] ?? "unbekannt"}").`,
+        );
+      }
       txs.forEach((tx, i) => {
         if (!tx?.blockTime) return;
         const { slot, signature } = work[i];

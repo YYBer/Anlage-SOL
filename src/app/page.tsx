@@ -16,10 +16,10 @@ import { loadOverrides, saveOverrides, toOverrides, TransfersIn, type OverrideIn
 import { findHedgedMarkets } from "./_components/Positions";
 import { berlinYear } from "@/lib/core/time";
 
-// Found on mainnet: a Phoenix perp trader, and a memecoin trader (pump.fun via a trading bot, some Jupiter swaps).
+// Found on mainnet: a Phoenix perp trader, and a small spot trader (Jupiter swaps, ~50 transactions).
 const SAMPLES = [
   ["Sample: perp trader", "wTfZZqcs9YLcfNN6wtLyWnKpDDWJGyz5G9A6tZpfgMw"],
-  ["Sample: memecoin trader", "3gg6BxZxR8G2jrQvJAU9b7YpZ1fNYE6o8fbufcnxQB1D"],
+  ["Sample: spot trader", "4vy8sofeZxjkoFxSXCN4f2jw5sVeRLWXxRBMpmn1Vqwd"],
 ] as const;
 const THIS_YEAR = berlinYear(new Date());
 const YEARS = [THIS_YEAR, THIS_YEAR - 1, THIS_YEAR - 2];
