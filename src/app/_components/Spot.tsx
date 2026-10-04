@@ -14,7 +14,7 @@ export function SpotDisposals({ so }: { so: SoReportDto }) {
           ))}
         </ul>
       )}
-      <div className="overflow-x-auto rounded-xl border border-line">
+      <div className="overflow-x-auto rounded-md border border-line">
         <table className="w-full min-w-[860px] text-sm">
           <thead className="bg-panel text-left text-xs text-muted">
             <tr>

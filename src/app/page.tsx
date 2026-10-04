@@ -238,7 +238,7 @@ export default function Home() {
         </Step>
 
         <div>
-          <button disabled={loading || !wallet.trim()} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-50">
+          <button disabled={loading || !wallet.trim()} className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-xs hover:bg-accent/90 outline-none focus-visible:ring-[3px] focus-visible:ring-accent/50 disabled:opacity-50">
             {loading ? "Generating…" : "Generate report"}
           </button>
         </div>
@@ -307,7 +307,7 @@ export default function Home() {
               <button
                 onClick={downloadReceipt}
                 disabled={report.soPending}
-                className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-50"
+                className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg shadow-xs hover:bg-accent/90 outline-none focus-visible:ring-[3px] focus-visible:ring-accent/50 disabled:opacity-50"
               >
                 {report.soPending ? "Waiting for spot…" : "Download PDF"}
               </button>

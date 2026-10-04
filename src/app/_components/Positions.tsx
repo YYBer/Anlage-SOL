@@ -4,7 +4,7 @@ import { day, eur, usd } from "./format";
 
 export function PositionsTable({ report }: { report: ReportDto }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-md border border-line">
       <table className="w-full min-w-[720px] text-sm">
         <thead className="bg-panel text-left text-xs text-muted">
           <tr>
@@ -94,7 +94,7 @@ export function HedgedMarkets({ report }: { report: ReportDto }) {
     return <p className="text-sm text-muted">No overlapping long and short positions on Phoenix and Jupiter found for {report.taxYear}.</p>;
   }
   return (
-    <div className="overflow-x-auto rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-md border border-line">
       <table className="w-full min-w-[560px] text-sm">
         <thead className="bg-panel text-left text-xs text-muted">
           <tr>
