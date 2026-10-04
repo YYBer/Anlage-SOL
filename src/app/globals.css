@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --panel: #fafafa;
-  --line: #e5e5e5;
-  --hover: #f0f0f0;
-  --muted: #6b6b6b;
-  --accent: #4f46e5;
-  --accent-fg: #ffffff;
+  /* Palette: tweakcn "clean-slate" */
+  --background: oklch(0.9842 0.0034 247.8575);
+  --foreground: oklch(0.2795 0.0368 260.0310);
+  --panel: oklch(1.0000 0 0);
+  --line: oklch(0.8717 0.0093 258.3382);
+  --hover: oklch(0.9670 0.0029 264.5419);
+  --muted: oklch(0.5510 0.0234 264.3637);
+  --accent: oklch(0.5854 0.2041 277.1173);
+  --accent-fg: oklch(1.0000 0 0);
   --good: #15803d;
   --bad: #b91c1c;
   --warn: #b45309;
@@ -16,14 +17,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --panel: #141414;
-    --line: #2a2a2a;
-    --hover: #1f1f1f;
-    --muted: #9a9a9a;
-    --accent: #818cf8;
-    --accent-fg: #0a0a0a;
+    --background: oklch(0.2077 0.0398 265.7549);
+    --foreground: oklch(0.9288 0.0126 255.5078);
+    --panel: oklch(0.2795 0.0368 260.0310);
+    --line: oklch(0.4461 0.0263 256.8018);
+    --hover: oklch(0.3351 0.0331 260.9120);
+    --muted: oklch(0.7137 0.0192 261.3246);
+    --accent: oklch(0.6801 0.1583 276.9349);
+    --accent-fg: oklch(0.2077 0.0398 265.7549);
     --good: #4ade80;
     --bad: #f87171;
     --warn: #fbbf24;
@@ -42,12 +43,12 @@
   --color-good: var(--good);
   --color-bad: var(--bad);
   --color-warn: var(--warn);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, sans-serif;
 }
