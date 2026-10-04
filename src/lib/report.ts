@@ -1,4 +1,5 @@
 import { createJupiterAdapter, type JupiterOptions } from "./adapters/jupiter";
+import { pacifica } from "./adapters/pacifica";
 import { phoenix } from "./adapters/phoenix";
 import type { OnProgress } from "./core/progress";
 import type { Adapter, Protocol, WalletHistory } from "./core/types";
@@ -17,7 +18,9 @@ export interface FetchOptions {
 }
 
 export function adapterFor(protocol: Protocol, opts: FetchOptions = {}): Adapter {
-  return protocol === "phoenix" ? phoenix : createJupiterAdapter(opts.jupiter);
+  if (protocol === "phoenix") return phoenix;
+  if (protocol === "pacifica") return pacifica;
+  return createJupiterAdapter(opts.jupiter);
 }
 
 /** Fetches every protocol and merges into one history; one failing protocol becomes a warning. */

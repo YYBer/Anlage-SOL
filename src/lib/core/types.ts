@@ -3,7 +3,7 @@ import type { OnProgress } from "./progress";
 // Protocol-neutral records. Every adapter maps its native data into these,
 // and everything downstream (position grouping, tax, exports) only sees these.
 
-export type Protocol = "phoenix" | "jupiter";
+export type Protocol = "phoenix" | "jupiter" | "pacifica";
 export type Side = "long" | "short";
 
 /** One execution that changed a position. All USD amounts are plain numbers in USD. */

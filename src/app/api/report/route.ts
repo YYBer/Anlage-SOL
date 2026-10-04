@@ -9,7 +9,7 @@ import type { FundingMode } from "@/lib/tax/germany";
 // Jupiter and spot history over RPC can take a while.
 export const maxDuration = 300;
 
-const PROTOCOLS: Protocol[] = ["phoenix", "jupiter"];
+const PROTOCOLS: Protocol[] = ["phoenix", "jupiter", "pacifica"];
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {

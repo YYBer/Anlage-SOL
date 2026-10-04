@@ -76,6 +76,8 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
   });
   const year = report.taxYear;
   const othersWithValues = others.filter((o) => o.gainsEur || o.lossesEur);
+  // Pacifica settles off-chain, so its rows have no signature and the receipt words that differently.
+  const hasPacifica = report.protocols.includes("pacifica");
 
   // --- Cover ---
   doc.setFont("helvetica", "bold").setFontSize(16).setTextColor(20);
@@ -93,7 +95,12 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
       ["Wallet (Solana)", report.wallet],
       ["Protokolle", report.protocols.length ? report.protocols.join(", ") : "—"],
       ["Zeitraum", `01.01.${year} – 31.12.${year}`],
-      ["Datengrundlage", "Transaktionen der Solana-Blockchain; jede Zeile mit Transaktionssignatur (Link auf solscan.io)"],
+      [
+        "Datengrundlage",
+        hasPacifica
+          ? "Transaktionen der Solana-Blockchain mit Transaktionssignatur (Link auf solscan.io); Pacifica-Ausführungen laut Pacifica-API (Abrechnung außerhalb der Blockchain, keine Signatur)"
+          : "Transaktionen der Solana-Blockchain; jede Zeile mit Transaktionssignatur (Link auf solscan.io)",
+      ],
     ],
   });
 
@@ -150,8 +157,13 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
     "Realisierung: Jede (Teil-)Glattstellung einer Position ist ein eigener Gewinn oder Verlust im Jahr der Glattstellung. Gewinne und Verluste werden je Glattstellung ermittelt, nicht je Position saldiert.",
     "Gebühren: Handelsgebühren der Glattstellung mindern das Ergebnis direkt. Eröffnungsgebühren werden als Anschaffungsnebenkosten mitgeführt und anteilig zur geschlossenen Positionsgröße verrechnet.",
     `Währungsumrechnung: ${report.fxSource}.`,
-    "Datenquellen: Phoenix über die öffentliche API von perp-api.phoenix.trade (jede Ausführung mit Transaktionssignatur); Jupiter Perps durch Dekodierung der On-Chain-Events des Programms PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu.",
-    "Nachprüfbarkeit: Jede Zeile in Anlage A und B verweist auf die Transaktion auf solscan.io. Die Angaben weiterer Plattformen stammen vom Steuerpflichtigen und sind durch deren Berichte zu belegen.",
+    "Datenquellen: Phoenix über die öffentliche API von perp-api.phoenix.trade (jede Ausführung mit Transaktionssignatur); Jupiter Perps durch Dekodierung der On-Chain-Events des Programms PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu." +
+      (hasPacifica
+        ? " Pacifica über die öffentliche API von api.pacifica.fi; die Abrechnung erfolgt dort außerhalb der Blockchain, daher tragen diese Zeilen keine Transaktionssignatur."
+        : ""),
+    hasPacifica
+      ? "Nachprüfbarkeit: Zeilen mit Signatur verweisen auf die Transaktion auf solscan.io. Pacifica-Zeilen sind durch die Handelshistorie des Kontos bei Pacifica zu belegen. Die Angaben weiterer Plattformen stammen vom Steuerpflichtigen und sind durch deren Berichte zu belegen."
+      : "Nachprüfbarkeit: Jede Zeile in Anlage A und B verweist auf die Transaktion auf solscan.io. Die Angaben weiterer Plattformen stammen vom Steuerpflichtigen und sind durch deren Berichte zu belegen.",
     ...(so ? so.method : []),
   ];
   for (const m of method) y = paragraph(doc, `• ${m}`, y + 1);
@@ -283,7 +295,7 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
     heading(doc, `Anlage D – Veräußerungen von Kryptowerten ${year} (FIFO, ${so.disposals.length})`, 20);
     paragraph(
       doc,
-      "* Anschaffungskosten unbekannt (Token per Übertragung erhalten) und mit 0 € angesetzt. A = Kaufdatum und Anschaffungskosten laut Angabe des Steuerpflichtigen (Belege der Börse).",
+      "A = Kaufdatum und Anschaffungskosten laut Angabe des Steuerpflichtigen (Belege der Börse). S = Anschaffungskosten mit dem Marktwert bei Zugang geschätzt (Zugang in selbst signierter Transaktion, z. B. Kauf über einen Trading-Bot). * = Anschaffungskosten unbekannt, mit 0 € angesetzt.",
       25,
       8,
     );
@@ -311,7 +323,7 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
         d.token,
         d.venue,
         num(d.amount, 6),
-        (d.acquiredAt ? berlinDate(d.acquiredAt) : "unbekannt") + (d.basisKnown ? "" : " *") + (d.basisFromUser ? " A" : ""),
+        (d.acquiredAt ? berlinDate(d.acquiredAt) : "unbekannt") + (d.basisFromUser ? " A" : d.basisEstimated ? " S" : d.basisKnown ? "" : " *"),
         `${d.holdingDays} T`,
         num(d.proceedsEur),
         num(d.costEur),

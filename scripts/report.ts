@@ -1,4 +1,4 @@
-// Usage: npx tsx scripts/report.ts <wallet> [--year 2026] [--protocols phoenix,jupiter] [--funding separate|include] [--out dir] [--max-sigs N]
+// Usage: npx tsx scripts/report.ts <wallet> [--year 2026] [--protocols phoenix,jupiter,pacifica] [--funding separate|include] [--out dir] [--max-sigs N]
 //   [--no-spot] [--spot-max-sigs N]  (Anlage SO from the wallet's swaps is on by default)
 //   [--other "Hyperliquid:120.50:40"]  (repeatable: label:gainsEur:lossesEur from another platform's report)
 // Jupiter reads SOLANA_RPC_URL; the public RPC works but is slow and rate limited.
@@ -25,7 +25,7 @@ if (!walletArg) {
 }
 const wallet: string = walletArg;
 const year = Number(flag("year", String(berlinYear(new Date()))));
-const protocols = flag("protocols", "phoenix,jupiter").split(",") as Protocol[];
+const protocols = flag("protocols", "phoenix,jupiter,pacifica").split(",") as Protocol[];
 const fundingMode = flag("funding", "separate") as FundingMode;
 const out = flag("out", "out");
 const maxSigs = Number(flag("max-sigs", "5000"));
@@ -39,7 +39,13 @@ const others: OtherSource[] = args
   });
 
 async function main() {
-  const { history, fx, report } = await germanyReport(wallet, year, protocols, fundingMode, { jupiter: { maxSignaturesPerSlot: maxSigs } });
+  // Fetching a busy wallet takes minutes; without this the CLI looks hung.
+  const onProgress = (p: { source: string; message: string; finished?: boolean }) =>
+    console.error(`${p.finished ? "✓" : "·"} ${p.source}: ${p.message}`);
+  const { history, fx, report } = await germanyReport(wallet, year, protocols, fundingMode, {
+    jupiter: { maxSignaturesPerSlot: maxSigs },
+    onProgress,
+  });
   const eur = (x: number) => x.toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 
   console.log(`\n${wallet} · Steuerjahr ${year} · ${protocols.join("+")} · Funding: ${fundingMode}`);

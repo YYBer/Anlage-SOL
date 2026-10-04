@@ -48,6 +48,7 @@ The product *is* the Solana integration — the chain is the only data source. N
 
 - **Jupiter Perps** (`PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu`) has no history API. Opens and liquidations do not list the owner wallet in their accounts, so the adapter derives the wallet's 9 **Position PDAs** (3 markets × long + 2 stablecoin-collateral shorts) with `findProgramAddressSync`, pages `getSignaturesForAddress` over each, and decodes the program's **Anchor `emit_cpi!` events** out of the inner instructions with `BorshEventCoder` and the program IDL. That yields size, price, PnL, position fee and funding fee per execution.
 - **Phoenix Perps** via its public API (`perp-api.phoenix.trade`) for trades, funding and collateral, with the on-chain signature kept on every row so the receipt stays verifiable.
+- **Pacifica** via its public API (`api.pacifica.fi`). It matches off-chain, so these fills carry no transaction signature: the receipt says so and points to the account's Pacifica history instead of Solscan for those rows. The API reports PnL net of the fee and no position size, so the adapter adds the fee back and rebuilds the running size per market and side.
 
 **Reading spot (Anlage SO), DEX-agnostic:** for every transaction of the wallet, the adapter nets `preTokenBalances` against `postTokenBalances` (plus the SOL delta, minus rent dust and the network fee). Tokens out + tokens in = a swap, which is a disposal plus an acquisition under § 23 EStG. This works identically for Jupiter, pump.fun, PumpSwap, Raydium, Orca, Meteora, DFlow or an unknown trading bot, because it reads the *effect* of the transaction instead of parsing each program's instructions. Program IDs are matched afterwards (`spot/venues.ts`) only to name the venue on screen. Perp-program transactions are excluded, since they belong to KAP.
 
@@ -84,6 +85,7 @@ src/lib/
   core/positions.ts      fills → positions (open until size returns to 0)
   adapters/phoenix.ts    Phoenix perp API (trades, funding, collateral)
   adapters/jupiter/      Jupiter Perps: Position PDAs → signatures → Anchor CPI events
+  adapters/pacifica.ts   Pacifica API (off-chain matching, no signatures)
   spot/history.ts        any transaction → net token deltas → swap / transfer
   spot/prices.ts         CoinGecko daily EUR, stablecoins via ECB
   tax/fx.ts              ECB USD/EUR reference rates
@@ -104,6 +106,12 @@ scripts/report.ts        CLI
 - **Jupiter Perps**: no history API. `increasePosition4` and liquidations do not include the owner
   wallet, so history is read per Position PDA (9 per wallet). In events `feeUsd = positionFeeUsd + fundingFeeUsd`,
   `pnlDelta` is before fees, and `priceImpactFeeUsd` is already in the execution price.
+
+- **Pacifica** (verified 2026-10-04 on two mainnet accounts): `api.pacifica.fi/api/v1/trades/history` and `/funding/history`
+  are public and need no key. `pnl` is net of `fee` ((price − entry_price) × amount − fee to the cent), funding `payout` is
+  signed (positive = received) with `side` ask = short, and no row carries a transaction signature. `limit` above 50 answers
+  429 and `start_time`/`end_time` span at most 30 days, but plain cursor paging has no window limit and reaches the account's
+  first trade (seen: 2025-09-24), so it is not a rolling retention window.
 
 ## Tax model (Germany)
 
@@ -137,10 +145,7 @@ scripts/report.ts        CLI
 
 - **Phoenix SOL collateral.** Phoenix accepts SOL as collateral and converts it to other assets automatically when an
   account gets risky. Those conversions may be disposals under § 23 EStG (Anlage SO). Currently only USDC collateral is assumed.
-- **More perp venues:**
-  - GMTrade
-  - Pacifica: off-chain matching; its public API (`/api/v1/trades/history`, `/funding/history`) has PnL and fees per fill
-    but no transaction signature, so those rows can't link to an on-chain receipt.
+- **More perp venues:** GMTrade.
 - **Perp vs perp on one platform** (funding-rate arbitrage type 1): hedges inside one DEX, e.g. long SOL in one Phoenix
   subaccount and short in another (Phoenix cross margin nets same-market positions within an account), or long and short
   at once on Jupiter. The legs are already counted in Anlage KAP; missing is the arbitrage option in the UI and pairing

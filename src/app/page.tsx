@@ -197,7 +197,7 @@ export default function Home() {
             ))}
           </div>
           <p className="text-xs text-muted">
-            We read everything the wallet did: perps on Phoenix and Jupiter Perps, and spot swaps on Jupiter, pump.fun or through a trading bot. Perps show up
+            We read everything the wallet did: perps on Phoenix, Jupiter Perps and Pacifica, and spot swaps on Jupiter, pump.fun or through a trading bot. Perps show up
             in seconds; spot needs the wallet&apos;s whole history and can take a few minutes on the first query.
           </p>
         </Step>
@@ -242,7 +242,7 @@ export default function Home() {
             <div>
               <h2 className="text-lg font-semibold">What to enter</h2>
               <p className="mt-1 text-xs text-muted">
-                Found in {report.taxYear}: Phoenix {fillsBy("phoenix")} trades · Jupiter Perps {fillsBy("jupiter")} trades · spot{" "}
+                Found in {report.taxYear}: Phoenix {fillsBy("phoenix")} trades · Jupiter Perps {fillsBy("jupiter")} trades · Pacifica {fillsBy("pacifica")} trades · spot{" "}
                 {report.soPending
                   ? "still reading…"
                   : report.so

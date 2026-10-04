@@ -1,6 +1,6 @@
 // Progress of a long fetch, streamed to the browser so users see what is happening.
 
-export type ProgressSource = "phoenix" | "jupiter" | "spot" | "prices";
+export type ProgressSource = "phoenix" | "jupiter" | "pacifica" | "spot" | "prices";
 
 export interface Progress {
   source: ProgressSource;

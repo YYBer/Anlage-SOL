@@ -3,6 +3,7 @@ import type { Progress, ProgressSource } from "@/lib/core/progress";
 const LABELS: Record<ProgressSource, string> = {
   phoenix: "Phoenix",
   jupiter: "Jupiter Perps",
+  pacifica: "Pacifica",
   spot: "Spot history",
   prices: "Token prices",
 };
