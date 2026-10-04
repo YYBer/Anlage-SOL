@@ -47,6 +47,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Native controls (radio, select dropdown) follow the theme. */
+:root {
+  color-scheme: light dark;
+  accent-color: var(--accent);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
