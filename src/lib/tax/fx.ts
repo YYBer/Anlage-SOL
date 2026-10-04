@@ -55,6 +55,21 @@ export function parseEcbCsv(csv: string): Map<string, number> {
   return rates;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The ECB API answers 5xx now and then (gateway timeouts); a few retries ride those out.
+async function fetchEcb(url: string): Promise<string> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url).catch(() => null);
+    if (res?.ok) return res.text();
+    const status = res?.status ?? 0;
+    if (attempt >= 3 || (status !== 0 && status !== 429 && status < 500)) {
+      throw new Error(res ? `ECB API ${status}` : "ECB API unreachable");
+    }
+    await sleep(1000 * 2 ** attempt);
+  }
+}
+
 const cache = new Map<string, Promise<FxTable>>();
 
 /** Loads ECB rates covering [from, to], starting 10 days earlier so a Monday-after-holiday still finds a rate. */
@@ -64,11 +79,8 @@ export function loadEcbFx(from: Date, to: Date): Promise<FxTable> {
   const key = `${start}:${end}`;
   if (!cache.has(key)) {
     const url = `https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?startPeriod=${start}&endPeriod=${end}&format=csvdata`;
-    const p = fetch(url)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`ECB API ${res.status}`);
-        return fxTableFromRates(parseEcbCsv(await res.text()));
-      })
+    const p = fetchEcb(url)
+      .then((csv) => fxTableFromRates(parseEcbCsv(csv)))
       .catch((e) => {
         cache.delete(key);
         throw e;
