@@ -9,7 +9,7 @@ export interface OverrideInput {
   date: string;
 }
 
-const storageKey = (wallet: string) => `perpelster:basis:${wallet}`;
+const storageKey = (wallet: string) => `anlage-sol:basis:${wallet}`;
 
 // Purchase prices belong to the wallet, not to a tax year: a 2024 purchase matters for 2026 sales too.
 export function loadOverrides(wallet: string): Record<string, OverrideInput> {

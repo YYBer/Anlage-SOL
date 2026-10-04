@@ -81,7 +81,7 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
   doc.setFont("helvetica", "bold").setFontSize(16).setTextColor(20);
   doc.text(`Nachweis Krypto-Derivate und -Veräußerungen · Steuerjahr ${year}`, MARGIN, 20);
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(90);
-  doc.text(`Erstellt mit Perpelster am ${berlinDate(generatedAt)} · Rechenhilfe, keine Steuerberatung`, MARGIN, 26);
+  doc.text(`Erstellt mit Anlage SOL am ${berlinDate(generatedAt)} · Rechenhilfe, keine Steuerberatung`, MARGIN, 26);
 
   autoTable(doc, {
     ...tableBase,
@@ -341,7 +341,7 @@ export function buildReceipt({ report, totals, others, so, generatedAt = new Dat
     doc.setPage(i);
     doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(130);
     const h = doc.internal.pageSize.getHeight();
-    doc.text(`Perpelster · ${report.wallet} · Steuerjahr ${year}`, MARGIN, h - 7);
+    doc.text(`Anlage SOL · ${report.wallet} · Steuerjahr ${year}`, MARGIN, h - 7);
     doc.text(`Seite ${i} von ${pages}`, doc.internal.pageSize.getWidth() - MARGIN, h - 7, { align: "right" });
   }
   return doc;

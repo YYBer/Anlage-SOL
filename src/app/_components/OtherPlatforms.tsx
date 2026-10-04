@@ -7,7 +7,7 @@ export interface OtherRow {
   losses: string;
 }
 
-const storageKey = (wallet: string, year: number) => `perpelster:others:${wallet}:${year}`;
+const storageKey = (wallet: string, year: number) => `anlage-sol:others:${wallet}:${year}`;
 
 export function loadOthers(wallet: string, year: number): OtherRow[] {
   try {

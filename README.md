@@ -1,9 +1,9 @@
-# Perpelster — your perp trades, ready for ELSTER
+# Anlage SOL — your Solana trades, ready for ELSTER
 
-> **Deine Perp-Trades. Fertig für ELSTER.**
+> **Deine Solana-Trades. Fertig für ELSTER.**
 > German tax reports for Solana traders: paste a wallet, get the exact lines to type into the tax form — no spreadsheets, no manual tagging.
 
-**Live MVP:** https://perpelster.vercel.app — no wallet connection, no signup. Paste any Solana address (or press a sample button) and press *Generate report*.
+**Live MVP:** https://anlage-sol.vercel.app — no wallet connection, no signup. Paste any Solana address (or press a sample button) and press *Generate report*.
 
 Sample wallets to test with (found on mainnet, not ours):
 
@@ -24,7 +24,7 @@ Germany taxes a Solana trader's two kinds of activity under two different laws, 
 
 No broker sends a Steuerbescheinigung for any of this. The trader has to reconstruct it: find every fill across venues, convert each to EUR at the right daily rate, apply FIFO across years, split the result over two forms, and keep proof the tax office accepts. Commercial crypto tax tools import CEX CSVs and stumble over on-chain perps — Jupiter Perps has no history API at all, and funding payments are invisible in a plain transaction list.
 
-**Perpelster does that from a wallet address alone**, and every number it prints links back to the transaction it came from.
+**Anlage SOL does that from a wallet address alone**, and every number it prints links back to the transaction it came from.
 
 ## Product
 

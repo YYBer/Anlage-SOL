@@ -147,7 +147,7 @@ export default function Home() {
     }
   }
 
-  const prefix = report ? `perpelster-${report.wallet.slice(0, 8)}-${report.taxYear}` : "";
+  const prefix = report ? `anlage-sol-${report.wallet.slice(0, 8)}-${report.taxYear}` : "";
 
   async function downloadReceipt() {
     if (!report || !totals) return;
@@ -165,9 +165,9 @@ export default function Home() {
   return (
     <main className={`mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 ${loading ? "pb-48" : ""}`}>
       <header className="mb-8">
-        <p className="text-sm font-medium text-muted">Perpelster</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Your perp trades, ready for ELSTER.</h1>
-        <p className="mt-1 text-sm text-muted">Jupiter and Phoenix trades turned into German tax reports — no spreadsheets, no manual tagging.</p>
+        <p className="text-sm font-medium text-muted">Anlage SOL</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Your Solana trades, ready for ELSTER.</h1>
+        <p className="mt-1 text-sm text-muted">Perps and spot swaps turned into German tax reports — no spreadsheets, no manual tagging.</p>
       </header>
 
       <form onSubmit={submit} className={`${card} grid gap-8`}>
