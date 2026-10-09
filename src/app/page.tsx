@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import type { Progress } from "@/lib/core/progress";
 import type { ReportDto, ReportStreamLine } from "@/lib/dto";
@@ -167,7 +168,10 @@ export default function Home() {
   return (
     <main className={`mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 ${loading ? "pb-48" : ""}`}>
       <header className="mb-8">
-        <p className="text-sm font-medium text-muted">Anlage SOL</p>
+        <p className="flex items-center gap-2 text-sm font-medium text-muted">
+          <Image src="/logo.png" alt="" width={24} height={24} className="rounded-full" loading="eager" />
+          Anlage SOL
+        </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">Your Solana trades, ready for ELSTER.</h1>
         <p className="mt-1 text-sm text-muted">Perps and spot swaps turned into German tax reports — no spreadsheets, no manual tagging.</p>
       </header>
