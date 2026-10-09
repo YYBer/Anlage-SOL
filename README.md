@@ -131,7 +131,7 @@ scripts/report.ts        CLI
 
 - Reads every transaction of the wallet and nets the wallet's token balance changes; tokens out + tokens in = a swap (disposal + acquisition). It works the same whether the user traded on Jupiter, pump.fun or through a trading bot, because it doesn't depend on the DEX. The venue (`spot/venues.ts`) is shown for information only. Perp program transactions are excluded (they are KAP).
 - FIFO per token over the full history; > 1 year holding is tax-free; 1.000 € Freigrenze noted.
-- Prices: stablecoins via ECB; others via CoinGecko daily EUR (public API: last 365 days, set `COINGECKO_API_KEY` for more); unpriced tokens valued by the other side of the swap.
+- Prices: stablecoins via ECB; others via CoinGecko daily EUR (public API and free demo keys: last 365 days; a paid key with `COINGECKO_API_PRO=1` goes further); unpriced tokens valued by the other side of the swap.
 - Tokens that arrive without a payment from the wallet have no on-chain purchase price. Cost basis is taken in this order: the user's own entry, else the market value on arrival if the wallet signed and paid for the transaction (a likely purchase funded from elsewhere), else 0 €. Each disposal shows which applied ("your entry" / "estimated" / "cost unknown"), marked A / S / * in the receipt.
 - The user can enter the real purchase price and date per arrival; the browser reruns FIFO on the server's valued movements, so nothing is fetched again (kept per wallet in the browser). The date matters: moving tokens between your own wallets does not restart the one-year holding period.
 - Anlage SO lines 45–51/58 checked against the official 2025 form (2026-09); the 2026 form is not out yet.

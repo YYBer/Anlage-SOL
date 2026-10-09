@@ -1,8 +1,8 @@
 import { TOKENS } from "./tokens";
 import type { FxTable } from "../tax/fx";
 
-// Daily EUR prices. CoinGecko's public API serves the last 365 days without a key;
-// COINGECKO_API_KEY (demo or pro) extends that. Stablecoins use the ECB rate instead.
+// Daily EUR prices. CoinGecko's public API and free demo keys serve only the last 365 days (checked 2026-10);
+// a paid key (COINGECKO_API_KEY + COINGECKO_API_PRO=1) extends that. Stablecoins use the ECB rate instead.
 
 export const PRICE_SOURCE =
   "Stablecoins (USDC, USDT) = 1 USD zum EZB-Referenzkurs; übrige Token: CoinGecko-Tagesschlusskurs in EUR; ohne Kurs: Wert der Gegenseite des Tauschs";
@@ -37,9 +37,11 @@ async function fetchCoinGecko(id: string, from: Date, to: Date): Promise<Map<str
 
 /** Loads prices for every known mint that appears, clamped to what the API tier allows. */
 export async function loadPriceBook(mints: string[], from: Date, to: Date, fx: FxTable, warnings: string[]): Promise<PriceBook> {
-  const limitFrom = process.env.COINGECKO_API_KEY ? from : new Date(Math.max(from.getTime(), Date.now() - 364 * DAY));
+  // Asking a demo key for older data fails the whole range, so clamp unless the key is paid.
+  const paid = !!process.env.COINGECKO_API_KEY && process.env.COINGECKO_API_PRO === "1";
+  const limitFrom = paid ? from : new Date(Math.max(from.getTime(), Date.now() - 364 * DAY));
   if (limitFrom > from) {
-    warnings.push(`CoinGecko ohne API-Key liefert nur 365 Tage; Kurse vor ${limitFrom.toISOString().slice(0, 10)} fehlen (COINGECKO_API_KEY setzen).`);
+    warnings.push(`CoinGecko liefert ohne kostenpflichtigen API-Key nur 365 Tage; Kurse vor ${limitFrom.toISOString().slice(0, 10)} fehlen.`);
   }
   const series = new Map<string, Map<string, number>>();
   for (const mint of new Set(mints)) {
